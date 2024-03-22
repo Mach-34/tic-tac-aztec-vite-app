@@ -12,7 +12,7 @@ import { deserializeGame } from 'utils/game';
 const { REACT_APP_API_URL: API_URL } = process.env;
 
 export default function Lobby(): JSX.Element {
-  const { address, initializeChannel, privkey, setActiveGame, signedIn } =
+  const { wallet, initializeChannel, setActiveGame, signedIn } =
     useUser();
   const socket = useSocket();
   // TODO: Remove any
@@ -28,12 +28,15 @@ export default function Lobby(): JSX.Element {
   );
 
   const joinGame = async (id: string, opponent: string) => {
-    if (!address || !privkey || !socket) return;
+    if (!wallet || !socket) return;
+
+    // get address
+    const address = wallet.getCompleteAddress().address;
 
     // Sign open channel as guest
     const guestChannelOpenSignature = BaseStateChannel.signOpenChannel(
-      AztecAddress.fromString(address),
-      privkey,
+      address,
+      wallet.getEncryptionPrivateKey(),
       AztecAddress.fromString(opponent),
       true
     );
@@ -68,9 +71,9 @@ export default function Lobby(): JSX.Element {
   };
 
   const startGame = async () => {
-    if (!socket) return;
+    if (!wallet || !socket) return;
     // Emit start game event
-    socket.emit('game:start', { address }, (res: any) => {
+    socket.emit('game:start', { address: wallet.getCompleteAddress().address.toString() }, (res: any) => {
       if (res.status === 'success') {
         const deserialized = deserializeGame(res.game);
         setActiveGame(deserialized);
@@ -105,7 +108,7 @@ export default function Lobby(): JSX.Element {
           <div className='mt-10 w-1/2'>
             {/* TODO: Remove any */}
             {games
-              .filter((game: any) => game.host !== address)
+              .filter((game: any) => game.host !== wallet?.getCompleteAddress().address.toString())
               .map((game: any, index: number) => (
                 <div className='flex items-center gap-2 mb-8' key={index}>
                   {game._id}
