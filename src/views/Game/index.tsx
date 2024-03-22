@@ -13,12 +13,10 @@ import { WINNING_PLACEMENTS } from 'utils/constants';
 export default function Game(): JSX.Element {
   const socket = useSocket();
   const {
-    address,
+    wallet,
     activeChannel,
     activeGame,
     initializeChannel,
-    privkey,
-    pubkey,
     setActiveGame,
     signingIn,
   } = useUser();
@@ -48,7 +46,7 @@ export default function Game(): JSX.Element {
 
   const isHost = useMemo(() => {
     if (!activeGame) return false;
-    return address === activeGame.host;
+    return wallet?.getCompleteAddress().address.toString() === activeGame.host;
   }, [activeGame]);
 
   const endCondition = useMemo(() => {
@@ -70,16 +68,16 @@ export default function Game(): JSX.Element {
 
   const yourTurn = useMemo(() => {
     if (!activeGame || !activeChannel?.openChannelResult) return false;
-    const isHost = address === activeGame.host;
+    const isHost = wallet?.getCompleteAddress().address.toString() === activeGame.host;
     if (isHost) {
       return activeGame.turnIndex % 2 === 0;
     } else {
       return activeGame.turnIndex % 2 === 1;
     }
-  }, [activeChannel, activeGame, address]);
+  }, [activeChannel, activeGame, wallet]);
 
   const signOpponentTurn = async () => {
-    if (!activeChannel || !privkey || !socket) return;
+    if (!activeChannel || !wallet || !socket) return;
     const turn = activeGame.turns[activeGame.turnIndex];
 
     const move = new Move(
@@ -90,7 +88,7 @@ export default function Game(): JSX.Element {
       BigInt(turn.gameId)
     );
 
-    const signature = move.sign(privkey);
+    const signature = move.sign(wallet.getEncryptionPrivateKey());
 
     socket.emit(
       'game:signOpponentTurn',
@@ -146,8 +144,9 @@ export default function Game(): JSX.Element {
   }, [activeChannel, activeGame, endCondition, isHost]);
 
   const commence = async () => {
-    if (!activeChannel || !privkey || !socket) return;
+    if (!activeChannel || !wallet || !socket) return;
     const { challengerOpenSignature } = activeGame;
+    console.log("Challenger Open Signature", challengerOpenSignature)
     const openChannelResult = await activeChannel.openChannel(
       challengerOpenSignature
     );
@@ -222,7 +221,7 @@ export default function Game(): JSX.Element {
   }, [activeChannel, activeGame, endCondition, isHost]);
 
   const handlePlacement = async (row: number, col: number) => {
-    if (!activeChannel || !activeGame || !privkey || !pubkey || !socket) return;
+    if (!activeChannel || !activeGame || !wallet || !socket) return;
 
     const move = activeChannel.buildMove(row, col);
 
@@ -333,7 +332,7 @@ export default function Game(): JSX.Element {
                           <X color='#2D2047' size={60} />
                         ))}
                       {isHovering &&
-                        (activeGame.host === address ? (
+                        (activeGame.host === wallet?.getCompleteAddress().address.toString() ? (
                           <X className='opacity-60' color='#2D2047' size={60} />
                         ) : (
                           <Circle

@@ -9,12 +9,11 @@ import {
 import {
   createPXEClient,
   GrumpkinScalar,
-  Fr,
   waitForPXE,
-  PXE,
   AztecAddress,
-  Point,
+  AccountWalletWithPrivateKey,
 } from '@aztec/aztec.js';
+import { getSchnorrAccount } from '@aztec/accounts/schnorr';
 import { useSocket } from './SocketContext';
 import { BaseStateChannel } from 'utils/baseChannel';
 import { TIC_TAC_TOE_CONTRACT } from 'utils/constants';
@@ -28,16 +27,13 @@ import { deserializeGame } from 'utils/game';
 // };
 
 type UserContextType = {
-  address: string;
+  wallet: AccountWalletWithPrivateKey | null;
   activeChannel: BaseStateChannel | null;
   activeGame: any;
   incrementNonce: () => void;
   initializeChannel: (game: any) => void;
   // account: AccountWalletWithPrivateKey | null;
   nonce: number;
-  pubkey: Point | null;
-  privkey: GrumpkinScalar | null;
-  pxe: PXE | null;
   setActiveChannel: Dispatch<SetStateAction<BaseStateChannel | null>>;
   setActiveGame: Dispatch<SetStateAction<any>>;
   signIn: (key: string) => Promise<void>;
@@ -46,18 +42,15 @@ type UserContextType = {
 };
 
 const UserContext = createContext<UserContextType>({
-  address: '',
+  wallet: null,
   activeChannel: null,
   activeGame: null,
   incrementNonce: () => null,
   initializeChannel: () => null,
   nonce: 0,
-  privkey: null,
-  pubkey: null,
-  pxe: null,
-  setActiveChannel: () => {},
-  setActiveGame: () => {},
-  signIn: async (_key: string) => {},
+  setActiveChannel: () => { },
+  setActiveGame: () => { },
+  signIn: async (_key: string) => { },
   signingIn: false,
   signedIn: false,
 });
@@ -68,15 +61,10 @@ export const UserProvider: React.FC<{ children: JSX.Element }> = ({
   const socket = useSocket();
 
   // const { REACT_APP_API_KEY } = process.env;
-  const [address, setAddress] = useState('');
-  const [activeChannel, setActiveChannel] = useState<BaseStateChannel | null>(
-    null
-  );
+  const [activeChannel, setActiveChannel] = useState<BaseStateChannel | null>(null);
   const [activeGame, setActiveGame] = useState<any>(null);
   const [nonce, setNonce] = useState(0);
-  const [privkey, setPrivkey] = useState<GrumpkinScalar | null>(null);
-  const [pubkey, setPubkey] = useState<Point | null>(null);
-  const [pxe, setPxe] = useState<PXE | null>(null);
+  const [wallet, setWallet] = useState<AccountWalletWithPrivateKey | null>(null);
   const [signingIn, setSigningIn] = useState(false);
 
   const incrementNonce = () => {
@@ -84,15 +72,16 @@ export const UserProvider: React.FC<{ children: JSX.Element }> = ({
   };
 
   const initializeChannel = (game: any) => {
-    if (!address || !privkey || !pxe) return;
+    if (!wallet) return;
     // Restore channel
+    // todo: replace with state channel
     const channel = new BaseStateChannel(
-      AztecAddress.fromString(address),
-      privkey,
+      wallet.getCompleteAddress().address,
+      wallet.getEncryptionPrivateKey(),
       AztecAddress.fromString(TIC_TAC_TOE_CONTRACT),
       // TODO: Change active game index
       1n,
-      pxe
+      wallet
     );
 
     channel.openChannelResult = game.executionResults.open;
@@ -104,38 +93,54 @@ export const UserProvider: React.FC<{ children: JSX.Element }> = ({
   // Get current nonce
   const signIn = async (key: string) => {
     setSigningIn(true);
-    const grumpkin = GrumpkinScalar.fromString(key);
 
-    // Test account creation
+    // Connect to PXE
     const PXE_URL = 'http://localhost:8080';
     const pxe = createPXEClient(PXE_URL);
     await waitForPXE(pxe);
-    const partialAddress = new Fr(100000n);
-    const completeAddress = await pxe.registerAccount(grumpkin, partialAddress);
-    const address = completeAddress.address.toString();
-    const pubkey = completeAddress.publicKey;
 
+    // Instantiate Grumpkin Account
+    const grumpkin = GrumpkinScalar.fromString(key);
+    const account = getSchnorrAccount(pxe, grumpkin, grumpkin);
+    const { address } = account.getCompleteAddress();
+
+    // check if account wallet exists in pxe
+    let wallet: AccountWalletWithPrivateKey;
+    const accountInPXE = await pxe.getExtendedContractData(address);
+    if (accountInPXE === undefined) {
+      // attempt to deploy the account
+      try {
+        await account.deploy().then(async (res) => await res.wait());
+      } catch (e) {
+        // probably already deployed
+        console.log("Error deploying account: ", e);
+      }
+      // register the account in the PXE
+      wallet = await account.register();
+    } else {
+      wallet = await account.getWallet();
+    }
+
+    // login to the server
     const res = await fetch(`http://localhost:8000/user/nonce`, {
       headers: {
-        'X-Address': address,
+        'X-Address': address.toString(),
       },
     });
     const { nonce: nonceRes } = await res.json();
 
-    setAddress(address);
+    // set state
+    setWallet(wallet)
     setNonce(nonceRes);
-    setPrivkey(grumpkin);
-    setPubkey(pubkey);
-    setPxe(pxe);
     setSigningIn(false);
   };
 
   useEffect(() => {
-    if (!address || !privkey || !pxe) return;
+    if (!wallet) return;
     (async () => {
       const res = await fetch(`http://localhost:8000/game/in-game`, {
         headers: {
-          'X-Address': address,
+          'X-Address': wallet.getCompleteAddress().address.toString(),
         },
       });
       const data = await res.json();
@@ -145,10 +150,10 @@ export const UserProvider: React.FC<{ children: JSX.Element }> = ({
         initializeChannel(deserialized);
       }
     })();
-  }, [address, privkey, pxe]);
+  }, [wallet]);
 
   useEffect(() => {
-    if (!privkey || !pxe || !socket) return;
+    if (!wallet || !socket) return;
 
     const handleGameJoin = (data: any) => {
       const deserialized = deserializeGame(data);
@@ -194,25 +199,22 @@ export const UserProvider: React.FC<{ children: JSX.Element }> = ({
       socket.off('game:signOpponentTurn', handleSignOpponentTurn);
       socket.off('game:turn', handleTurn);
     };
-  }, [privkey, pxe, setActiveGame, socket]);
+  }, [wallet, setActiveGame, socket]);
 
   return (
     <UserContext.Provider
       value={{
-        address,
+        wallet,
         activeChannel,
         activeGame,
         incrementNonce,
         initializeChannel,
         nonce,
-        privkey,
-        pubkey,
-        pxe,
         setActiveChannel,
         setActiveGame,
         signIn,
         signingIn,
-        signedIn: !!privkey,
+        signedIn: !!wallet,
       }}
     >
       {children}
