@@ -9,6 +9,7 @@ import { useSocket } from 'contexts/SocketContext';
 import { AztecAddress } from '@aztec/circuits.js';
 import { deserializeGame } from 'utils/game';
 import { WINNING_PLACEMENTS } from 'utils/constants';
+// import DuplicationFraudModal from './components/DuplicationFraudModal';
 
 export default function Game(): JSX.Element {
   const socket = useSocket();
@@ -22,7 +23,9 @@ export default function Game(): JSX.Element {
   } = useUser();
   const navigate = useNavigate();
   const [board, setBoard] = useState<number[]>([]);
+  // const [showDuplicationModal, setShowDuplicationModal] = useState(false);
   const [showPiece, setShowPiece] = useState({ row: -1, col: -1 });
+  const [triggeringTimeout, setTriggeringTimeout] = useState(false);
   // const [showSignatureModal, setShowSignatureModal] = useState(false);
 
   const checkWinningPlacement = () => {
@@ -44,6 +47,18 @@ export default function Game(): JSX.Element {
     setBoard(board);
   };
 
+  const canMove = useMemo(() => {
+    if (!activeGame || !activeChannel?.openChannelResult) return false;
+    const isHost =
+      wallet?.getCompleteAddress().address.toString() === activeGame.host;
+
+    const isTurn = isHost
+      ? activeGame.turnIndex % 2 === 0
+      : activeGame.turnIndex % 2 === 1;
+
+    return isTurn && activeGame.turns.length === activeGame.turnIndex;
+  }, [activeChannel, activeGame, wallet]);
+
   const isHost = useMemo(() => {
     if (!activeGame) return false;
     return wallet?.getCompleteAddress().address.toString() === activeGame.host;
@@ -57,24 +72,6 @@ export default function Game(): JSX.Element {
     }
     return activeGame.turnIndex === 9;
   }, [activeGame, board, isHost]);
-
-  const pendingOpponentMoveSignature = useMemo(() => {
-    if (!activeChannel || !activeGame) return false;
-    if (activeGame.turnIndex === 0) {
-      return true;
-    }
-    return !activeGame.turns[activeGame.turnIndex]?.opponentSignature;
-  }, [activeChannel, activeGame]);
-
-  const yourTurn = useMemo(() => {
-    if (!activeGame || !activeChannel?.openChannelResult) return false;
-    const isHost = wallet?.getCompleteAddress().address.toString() === activeGame.host;
-    if (isHost) {
-      return activeGame.turnIndex % 2 === 0;
-    } else {
-      return activeGame.turnIndex % 2 === 1;
-    }
-  }, [activeChannel, activeGame, wallet]);
 
   const signOpponentTurn = async () => {
     if (!activeChannel || !wallet || !socket) return;
@@ -106,6 +103,7 @@ export default function Game(): JSX.Element {
   };
 
   const actions = useMemo(() => {
+    const arr = [];
     if (!activeChannel || !activeGame) return <></>;
 
     const currentTurn = activeGame.turns[activeGame.turnIndex];
@@ -113,18 +111,20 @@ export default function Game(): JSX.Element {
       ? activeGame.turnIndex % 2 === 0
       : activeGame.turnIndex % 2 === 1;
 
+    // Turn related actions
+
     if (endCondition) {
-      return <Button onClick={() => submitGame()} text='Submit Game' />;
+      arr.push(<Button onClick={() => submitGame()} text='Submit Game' />);
     } else if (
       isHost &&
       activeGame.challengerOpenSignature &&
       !activeChannel.openChannelResult
     ) {
-      return <Button onClick={() => commence()} text='Sign Open Channel' />;
+      arr.push(<Button onClick={() => commence()} text='Sign Open Channel' />);
     } else {
       if (currentTurn) {
         if (!isTurn && !currentTurn.opponentSignature) {
-          return (
+          arr.push(
             <Button
               onClick={() => signOpponentTurn()}
               text='Sign Opponent Move'
@@ -133,20 +133,38 @@ export default function Game(): JSX.Element {
         } else if (
           isTurn &&
           currentTurn.opponentSignature &&
-          activeChannel.turnResults.length !== activeGame.turns.length
+          activeGame.turnIndex.length !== activeGame.turns.length
         ) {
-          return <Button onClick={() => submitTurn()} text='Finalize Turn' />;
+          arr.push(
+            <Button onClick={() => submitTurn()} text='Finalize Turn' />
+          );
         }
-      } else {
-        return <></>;
       }
     }
-  }, [activeChannel, activeGame, endCondition, isHost]);
+
+    // Timeout related actions
+    const waitingOnOpponentTurn =
+      !isTurn && activeGame.turns.length === activeGame.turnIndex;
+    const waitingOnOpponentFinalization =
+      !isTurn &&
+      !!currentTurn.opponentSignature &&
+      activeGame.turnIndex !== activeGame.turns.length;
+    if (waitingOnOpponentTurn || waitingOnOpponentFinalization) {
+      arr.push(
+        <Button
+          loading={triggeringTimeout}
+          onClick={() => triggerTimeout()}
+          text={triggeringTimeout ? 'Triggering timeout' : 'Trigger timeout'}
+        />
+      );
+    }
+
+    return arr;
+  }, [activeChannel, activeGame, endCondition, isHost, triggeringTimeout]);
 
   const commence = async () => {
     if (!activeChannel || !wallet || !socket) return;
     const { challengerOpenSignature } = activeGame;
-    console.log("Challenger Open Signature", challengerOpenSignature)
     const openChannelResult = await activeChannel.openChannel(
       challengerOpenSignature
     );
@@ -234,7 +252,7 @@ export default function Game(): JSX.Element {
           row: move.row,
           col: move.col,
           turnIndex: move.turnIndex,
-          gameId: Number(move.gameIndex),
+          gameId: activeGame.gameId,
         },
       },
       (res: any) => {
@@ -280,6 +298,14 @@ export default function Game(): JSX.Element {
     );
   };
 
+  const triggerTimeout = async () => {
+    if (!activeChannel) return;
+    setTriggeringTimeout(true);
+    await activeChannel.finalize();
+
+    // Put websocket functionality here
+  };
+
   useEffect(() => {
     // Kick back to lobby if not in game
     if (!signingIn && !activeGame) {
@@ -294,6 +320,11 @@ export default function Game(): JSX.Element {
       <div className='flex items-center justify-between p-4'>
         <div>{statusMessage}</div>
         <div>{actions}</div>
+        {/* <Button
+          onClick={() => setShowDuplicationModal(true)}
+          Icon={BookCopy}
+          text='Prove Duplication Fraud'
+        /> */}
       </div>
       <div className='flex flex-col items-center justify-center h-full gap-10'>
         <div>
@@ -311,19 +342,15 @@ export default function Game(): JSX.Element {
                       key={index}
                       onClick={() =>
                         !occupied &&
-                        yourTurn &&
-                        pendingOpponentMoveSignature &&
+                        canMove &&
                         handlePlacement(rowIndex, colIndex)
                       }
                       onMouseEnter={() =>
                         !occupied &&
-                        yourTurn &&
-                        pendingOpponentMoveSignature &&
+                        canMove &&
                         setShowPiece({ row: rowIndex, col: colIndex })
                       }
-                      onMouseLeave={() =>
-                        yourTurn && setShowPiece({ row: -1, col: -1 })
-                      }
+                      onMouseLeave={() => setShowPiece({ row: -1, col: -1 })}
                     >
                       {occupied &&
                         (val === 4 ? (
@@ -332,7 +359,8 @@ export default function Game(): JSX.Element {
                           <X color='#2D2047' size={60} />
                         ))}
                       {isHovering &&
-                        (activeGame.host === wallet?.getCompleteAddress().address.toString() ? (
+                        (activeGame.host ===
+                        wallet?.getCompleteAddress().address.toString() ? (
                           <X className='opacity-60' color='#2D2047' size={60} />
                         ) : (
                           <Circle
@@ -349,6 +377,11 @@ export default function Game(): JSX.Element {
           )}
         </div>
       </div>
+      {/* <DuplicationFraudModal
+        game={activeGame}
+        onClose={() => setShowDuplicationModal(false)}
+        open={showDuplicationModal}
+      /> */}
     </MainLayout>
   );
 }

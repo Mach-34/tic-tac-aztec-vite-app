@@ -48,9 +48,9 @@ const UserContext = createContext<UserContextType>({
   incrementNonce: () => null,
   initializeChannel: () => null,
   nonce: 0,
-  setActiveChannel: () => { },
-  setActiveGame: () => { },
-  signIn: async (_key: string) => { },
+  setActiveChannel: () => {},
+  setActiveGame: () => {},
+  signIn: async (_key: string) => {},
   signingIn: false,
   signedIn: false,
 });
@@ -61,10 +61,14 @@ export const UserProvider: React.FC<{ children: JSX.Element }> = ({
   const socket = useSocket();
 
   // const { REACT_APP_API_KEY } = process.env;
-  const [activeChannel, setActiveChannel] = useState<BaseStateChannel | null>(null);
+  const [activeChannel, setActiveChannel] = useState<BaseStateChannel | null>(
+    null
+  );
   const [activeGame, setActiveGame] = useState<any>(null);
   const [nonce, setNonce] = useState(0);
-  const [wallet, setWallet] = useState<AccountWalletWithPrivateKey | null>(null);
+  const [wallet, setWallet] = useState<AccountWalletWithPrivateKey | null>(
+    null
+  );
   const [signingIn, setSigningIn] = useState(false);
 
   const incrementNonce = () => {
@@ -79,8 +83,7 @@ export const UserProvider: React.FC<{ children: JSX.Element }> = ({
       wallet.getCompleteAddress().address,
       wallet.getEncryptionPrivateKey(),
       AztecAddress.fromString(TIC_TAC_TOE_CONTRACT),
-      // TODO: Change active game index
-      1n,
+      BigInt(game.gameId),
       wallet
     );
 
@@ -101,7 +104,7 @@ export const UserProvider: React.FC<{ children: JSX.Element }> = ({
 
     // Instantiate Grumpkin Account
     const grumpkin = GrumpkinScalar.fromString(key);
-    const account = getSchnorrAccount(pxe, grumpkin, grumpkin);
+    const account = getSchnorrAccount(pxe, grumpkin, grumpkin, 100n);
     const { address } = account.getCompleteAddress();
 
     // check if account wallet exists in pxe
@@ -113,7 +116,7 @@ export const UserProvider: React.FC<{ children: JSX.Element }> = ({
         await account.deploy().then(async (res) => await res.wait());
       } catch (e) {
         // probably already deployed
-        console.log("Error deploying account: ", e);
+        console.log('Error deploying account: ', e);
       }
       // register the account in the PXE
       wallet = await account.register();
@@ -130,7 +133,7 @@ export const UserProvider: React.FC<{ children: JSX.Element }> = ({
     const { nonce: nonceRes } = await res.json();
 
     // set state
-    setWallet(wallet)
+    setWallet(wallet);
     setNonce(nonceRes);
     setSigningIn(false);
   };

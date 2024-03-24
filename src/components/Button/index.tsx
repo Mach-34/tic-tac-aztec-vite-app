@@ -1,8 +1,9 @@
-import { LucideIcon } from 'lucide-react';
+import { LucideIcon, Loader2 } from 'lucide-react';
 
 type ButtonProps = {
   className?: string;
   Icon?: LucideIcon;
+  loading?: boolean;
   onClick: () => void;
   text: string;
 };
@@ -10,6 +11,7 @@ type ButtonProps = {
 export default function Button({
   className,
   Icon,
+  loading,
   onClick,
   text,
 }: ButtonProps): JSX.Element {
@@ -18,7 +20,8 @@ export default function Button({
   return (
     <button className={cn} onClick={onClick}>
       {text}
-      {Icon && <Icon size={18} />}
+      {loading && <Loader2 className='animate-spin' size={18} />}
+      {!loading && Icon && <Icon size={18} />}
     </button>
   );
 }

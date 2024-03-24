@@ -14,6 +14,7 @@
     "@aztec/aztec.js": "file:../../aztec-packages/yarn-project/aztec.js",
     "@aztec/circuits.js": "file:../../aztec-packages/yarn-project/circuits.js",
     "@aztec/circuit-types": "file:../../aztec-packages/yarn-project/circuit-types",
+    "@aztec/foundation": "file:../../aztec-packages/yarn-project/foundation",
     "@aztec/types": "file:../../aztec-packages/yarn-project/types",
     "@radix-ui/react-dialog": "^1.0.5",
     "esbuild-plugins-node-modules-polyfill": "^1.6.3",
