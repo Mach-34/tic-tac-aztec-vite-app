@@ -6,14 +6,13 @@ import {
     TxStatus,
 } from "@aztec/circuit-types";
 import { AztecAddress, GrumpkinScalar } from "@aztec/circuits.js";
-import { TicTacToeContract } from "../artifacts/TicTacToe.js";
+import { TicTacToeContract } from "artifacts/TicTacToe.js";
 import {
-    AccountWalletWithPrivateKey,
     FunctionSelector,
     Fr,
     SentTx,
 } from "@aztec/aztec.js";
-import { getSchnorrAccount, getSchnorrWallet } from '@aztec/accounts/schnorr';
+import { getSchnorrWallet } from '@aztec/accounts/schnorr';
 import {
     serializeSignature,
     emptyCapsuleStack,

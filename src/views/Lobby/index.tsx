@@ -50,11 +50,16 @@ export default function Lobby(): JSX.Element {
     };
 
     // Generate unique id
-    // const gameId = genAztecId(AztecAddress.fromString(opponent), address);
+    const gameId = genAztecId(AztecAddress.fromString(opponent), address);
 
     socket.emit(
       'game:join',
-      { address, id, signature: serializedSignature },
+      {
+        address: address.toString(),
+        gameId,
+        id,
+        signature: serializedSignature,
+      },
       (res: any) => {
         if (res.status === 'success') {
           const deserialized = deserializeGame(res.game);

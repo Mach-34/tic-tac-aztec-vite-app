@@ -7,7 +7,7 @@ import Button from 'components/Button';
 import { Move } from 'utils';
 import { useSocket } from 'contexts/SocketContext';
 import { AztecAddress } from '@aztec/circuits.js';
-import { deserializeGame } from 'utils/game';
+import { deserializeGame, getTimeout } from 'utils/game';
 import { WINNING_PLACEMENTS } from 'utils/constants';
 // import DuplicationFraudModal from './components/DuplicationFraudModal';
 
@@ -82,8 +82,7 @@ export default function Game(): JSX.Element {
       turn.row,
       turn.col,
       activeGame.turnIndex,
-      // BigInt(turn.gameId),
-      1n
+      BigInt(turn.gameId)
     );
 
     const signature = move.sign(wallet.getEncryptionPrivateKey());
@@ -115,44 +114,60 @@ export default function Game(): JSX.Element {
     // Turn related actions
 
     if (endCondition) {
-      arr.push(<Button onClick={() => submitGame()} text='Submit Game' />);
+      arr.push(
+        <Button
+          className='my-2'
+          onClick={() => submitGame()}
+          text='Submit Game'
+        />
+      );
     } else if (
       isHost &&
       activeGame.challengerOpenSignature &&
       !activeChannel.openChannelResult
     ) {
-      arr.push(<Button onClick={() => commence()} text='Sign Open Channel' />);
-    } else {
-      if (currentTurn) {
-        if (!isTurn && !currentTurn.opponentSignature) {
-          arr.push(
-            <Button
-              onClick={() => signOpponentTurn()}
-              text='Sign Opponent Move'
-            />
-          );
-        } else if (
-          isTurn &&
-          currentTurn.opponentSignature &&
-          activeGame.turnIndex.length !== activeGame.turns.length
-        ) {
-          arr.push(
-            <Button onClick={() => submitTurn()} text='Finalize Turn' />
-          );
-        }
+      arr.push(
+        <Button
+          className='my-2'
+          onClick={() => commence()}
+          text='Sign Open Channel'
+        />
+      );
+    }
+    if (currentTurn) {
+      if (!isTurn && !currentTurn.opponentSignature) {
+        arr.push(
+          <Button
+            className='my-2'
+            onClick={() => signOpponentTurn()}
+            text='Sign Opponent Move'
+          />
+        );
+      } else if (
+        isTurn &&
+        currentTurn.opponentSignature &&
+        activeGame.turnIndex !== activeGame.turns.length
+      ) {
+        arr.push(
+          <Button
+            className='my-2'
+            onClick={() => submitTurn()}
+            text='Finalize Turn'
+          />
+        );
       }
     }
 
     // Timeout related actions
-    const waitingOnOpponentTurn =
-      !isTurn && activeGame.turns.length === activeGame.turnIndex;
+    const waitingOnOpponentTurn = !isTurn && !currentTurn;
     const waitingOnOpponentFinalization =
       !isTurn &&
-      !!currentTurn.opponentSignature &&
+      !!currentTurn?.opponentSignature &&
       activeGame.turnIndex !== activeGame.turns.length;
     if (waitingOnOpponentTurn || waitingOnOpponentFinalization) {
       arr.push(
         <Button
+          className='my-2'
           loading={triggeringTimeout}
           onClick={() => triggerTimeout()}
           text={triggeringTimeout ? 'Triggering timeout' : 'Trigger timeout'}
@@ -253,7 +268,7 @@ export default function Game(): JSX.Element {
           row: move.row,
           col: move.col,
           turnIndex: move.turnIndex,
-          gameId: 1,
+          gameId: activeGame.gameId,
         },
       },
       (res: any) => {
@@ -280,8 +295,7 @@ export default function Game(): JSX.Element {
       turn.row,
       turn.col,
       activeGame.turnIndex,
-      // BigInt(turn.gameId)
-      1n
+      BigInt(turn.gameId)
     );
 
     const turnResult = await activeChannel.turn(move, turn.opponentSignature);
@@ -301,11 +315,19 @@ export default function Game(): JSX.Element {
   };
 
   const triggerTimeout = async () => {
-    if (!activeChannel) return;
+    if (!activeChannel || !socket || !wallet) return;
     setTriggeringTimeout(true);
-    await activeChannel.finalize();
-
+    const res = await activeChannel.finalize();
+    console.log('Res: ', res);
+    setTriggeringTimeout(false);
     // Put websocket functionality here
+    socket.emit('game:timeoutTriggered', (res: any) => {
+      if (res.status === 'success') {
+        const deserialized = deserializeGame(activeGame);
+        deserialized.timeouit = getTimeout(activeGame.gameId, wallet);
+        setActiveGame(deserialized);
+      }
+    });
   };
 
   useEffect(() => {
