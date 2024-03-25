@@ -7,13 +7,12 @@ import { useSocket } from 'contexts/SocketContext';
 import { useNavigate } from 'react-router-dom';
 import { BaseStateChannel } from 'utils/baseChannel';
 import { AztecAddress } from '@aztec/aztec.js';
-import { deserializeGame } from 'utils/game';
+import { deserializeGame, genAztecId } from 'utils/game';
 
 const { REACT_APP_API_URL: API_URL } = process.env;
 
 export default function Lobby(): JSX.Element {
-  const { wallet, initializeChannel, setActiveGame, signedIn } =
-    useUser();
+  const { wallet, initializeChannel, setActiveGame, signedIn } = useUser();
   const socket = useSocket();
   // TODO: Remove any
   const [games, setGames] = useState<any>([]);
@@ -50,9 +49,17 @@ export default function Lobby(): JSX.Element {
       ],
     };
 
+    // Generate unique id
+    const gameId = genAztecId(AztecAddress.fromString(opponent), address);
+
     socket.emit(
       'game:join',
-      { address, id, signature: serializedSignature },
+      {
+        address: address.toString(),
+        gameId,
+        id,
+        signature: serializedSignature,
+      },
       (res: any) => {
         if (res.status === 'success') {
           const deserialized = deserializeGame(res.game);
@@ -73,17 +80,21 @@ export default function Lobby(): JSX.Element {
   const startGame = async () => {
     if (!wallet || !socket) return;
     // Emit start game event
-    socket.emit('game:start', { address: wallet.getCompleteAddress().address.toString() }, (res: any) => {
-      if (res.status === 'success') {
-        const deserialized = deserializeGame(res.game);
-        setActiveGame(deserialized);
-        initializeChannel(deserialized);
-        // TODO: Figure out why this isn't working
-        navigate('/game/pending');
-      } else {
-        // TODO: Handle error case
+    socket.emit(
+      'game:start',
+      { address: wallet.getCompleteAddress().address.toString() },
+      (res: any) => {
+        if (res.status === 'success') {
+          const deserialized = deserializeGame(res.game);
+          setActiveGame(deserialized);
+          initializeChannel(deserialized);
+          // TODO: Figure out why this isn't working
+          navigate('/game/pending');
+        } else {
+          // TODO: Handle error case
+        }
       }
-    });
+    );
   };
 
   useEffect(() => {
@@ -108,7 +119,10 @@ export default function Lobby(): JSX.Element {
           <div className='mt-10 w-1/2'>
             {/* TODO: Remove any */}
             {games
-              .filter((game: any) => game.host !== wallet?.getCompleteAddress().address.toString())
+              .filter(
+                (game: any) =>
+                  game.host !== wallet?.getCompleteAddress().address.toString()
+              )
               .map((game: any, index: number) => (
                 <div className='flex items-center gap-2 mb-8' key={index}>
                   {game._id}

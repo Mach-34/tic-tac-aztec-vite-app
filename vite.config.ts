@@ -12,6 +12,7 @@ export default defineConfig(({ mode }) => {
     plugins: [react(), nodePolyfills()],
     resolve: {
       alias: {
+        artifacts: "/src/artifacts",
         assets: "/src/assets",
         components: "/src/components",
         contexts: "/src/contexts",

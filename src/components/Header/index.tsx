@@ -28,15 +28,16 @@ export default function Header(): JSX.Element {
         Tic-Tac-Aztec
       </Link>
       <div className='flex gap-2 items-center'>
-        {!!activeGame && !location.pathname.includes('/game') && (
+        {!!activeGame && !pathname.includes('/game') && (
           <Link className='bg-red rounded text-white' to='/game/pending'>
             Go to game
           </Link>
         )}
         <Button
           className='border-white border text-black'
-          onClick={() => setShowSignInModal(true)}
           Icon={signedIn ? User : KeyRound}
+          loading={signingIn}
+          onClick={() => setShowSignInModal(true)}
           text={signedIn ? 'Signed in' : 'Sign in'}
         />
       </div>
@@ -57,6 +58,7 @@ export default function Header(): JSX.Element {
           />
           <div>
             <Button
+              loading={signingIn}
               onClick={() => handleSignIn()}
               text={signingIn ? 'Signing in' : 'Sign in'}
             />
