@@ -1,7 +1,7 @@
 import { AppExecutionResult } from "@aztec/circuit-types";
 import { SchnorrSignature } from "@aztec/circuits.js/barretenberg";
 import { AztecAddress, Fr } from "@aztec/circuits.js";
-import { pedersenHash } from "@aztec/foundation/crypto";
+// import { pedersenHash } from "@aztec/foundation/crypto";
 
 // TODO: Get rid of any
 export const deserializeGame = (game: any) => {
@@ -21,7 +21,8 @@ export const deserializeGame = (game: any) => {
 }
 
 export const genAztecId = (challenger: AztecAddress, host: AztecAddress) => {
-    const randomSeed = Fr.random();
-    const input = [challenger.toBuffer(), host.toBuffer(), randomSeed.toBuffer()];
-    return `0x${pedersenHash(input).toString('hex')}`;
+    // const randomSeed = Fr.random();
+    // const input = [challenger.toBuffer(), host.toBuffer(), randomSeed.toBuffer()];
+    return ''
+    // return `0x${pedersenHash(input).toString('hex')}`;
 }

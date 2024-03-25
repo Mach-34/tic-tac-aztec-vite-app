@@ -82,7 +82,8 @@ export default function Game(): JSX.Element {
       turn.row,
       turn.col,
       activeGame.turnIndex,
-      BigInt(turn.gameId)
+      // BigInt(turn.gameId),
+      1n
     );
 
     const signature = move.sign(wallet.getEncryptionPrivateKey());
@@ -252,7 +253,7 @@ export default function Game(): JSX.Element {
           row: move.row,
           col: move.col,
           turnIndex: move.turnIndex,
-          gameId: activeGame.gameId,
+          gameId: 1,
         },
       },
       (res: any) => {
@@ -279,7 +280,8 @@ export default function Game(): JSX.Element {
       turn.row,
       turn.col,
       activeGame.turnIndex,
-      BigInt(turn.gameId)
+      // BigInt(turn.gameId)
+      1n
     );
 
     const turnResult = await activeChannel.turn(move, turn.opponentSignature);

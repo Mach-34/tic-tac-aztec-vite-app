@@ -83,7 +83,8 @@ export const UserProvider: React.FC<{ children: JSX.Element }> = ({
       wallet.getCompleteAddress().address,
       wallet.getEncryptionPrivateKey(),
       AztecAddress.fromString(TIC_TAC_TOE_CONTRACT),
-      BigInt(game.gameId),
+      // BigInt(game.gameId),
+      1n,
       wallet
     );
 
