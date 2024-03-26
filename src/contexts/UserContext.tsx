@@ -16,8 +16,8 @@ import {
 import { getSchnorrAccount } from '@aztec/accounts/schnorr';
 import { useSocket } from './SocketContext';
 import { BaseStateChannel } from '@mach-34/aztec-statechannel-tictactoe';
-import { PXE_URL, SERVER_URL } from 'utils/constants';
-import { deserializeGame, getTimeout } from 'utils/game';
+import { PXE_URL } from 'utils/constants';
+import { deserializeGame, getTimeout } from 'utils';
 const { REACT_APP_API_URL: API_URL } = process.env;
 
 // type Game = {

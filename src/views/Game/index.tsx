@@ -4,10 +4,10 @@ import { Circle, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useUser } from 'contexts/UserContext';
 import Button from 'components/Button';
-import { Move } from 'utils';
+import { Move } from '@mach-34/aztec-statechannel-tictactoe';
 import { useSocket } from 'contexts/SocketContext';
 import { AztecAddress } from '@aztec/circuits.js';
-import { deserializeGame, getTimeout } from 'utils/game';
+import { deserializeGame, getTimeout } from 'utils';
 import { WINNING_PLACEMENTS } from 'utils/constants';
 // import DuplicationFraudModal from './components/DuplicationFraudModal';
 
@@ -86,7 +86,7 @@ export default function Game(): JSX.Element {
       BigInt(turn.gameId)
     );
 
-    const signature = move.sign(wallet.getEncryptionPrivateKey());
+    const signature = move.sign(wallet);
 
     socket.emit(
       'game:signOpponentTurn',
@@ -293,7 +293,7 @@ export default function Game(): JSX.Element {
 
     const move = activeChannel.buildMove(turn.row, turn.col);
     const turnResult = await activeChannel.turn(move, turn.opponentSignature);
-    
+
     socket.emit(
       'game:finalizeTurn',
       {

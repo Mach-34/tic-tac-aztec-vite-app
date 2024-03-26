@@ -7,7 +7,7 @@ import { useSocket } from 'contexts/SocketContext';
 import { useNavigate } from 'react-router-dom';
 import { AztecAddress } from '@aztec/aztec.js';
 import { BaseStateChannel } from '@mach-34/aztec-statechannel-tictactoe';
-import { deserializeGame, genAztecId } from 'utils/game';
+import { deserializeGame, genAztecId } from 'utils';
 
 const { REACT_APP_API_URL: API_URL } = process.env;
 
