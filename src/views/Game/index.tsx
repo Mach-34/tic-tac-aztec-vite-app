@@ -164,7 +164,7 @@ export default function Game(): JSX.Element {
       !isTurn &&
       !!currentTurn?.opponentSignature &&
       activeGame.turnIndex !== activeGame.turns.length;
-    if (waitingOnOpponentTurn || waitingOnOpponentFinalization) {
+    if (true) {
       arr.push(
         <Button
           className='my-2'
@@ -317,8 +317,29 @@ export default function Game(): JSX.Element {
   const triggerTimeout = async () => {
     if (!activeChannel || !socket || !wallet) return;
     setTriggeringTimeout(true);
-    const res = await activeChannel.finalize();
-    console.log('Res: ', res);
+
+    const isTurn = isHost
+      ? activeGame.turnIndex % 2 === 0
+      : activeGame.turnIndex % 2 === 1;
+
+    if (!isTurn) {
+      await activeChannel.finalize();
+    } else {
+      // Add turn to active channel before finalizing
+      const turn = activeGame.turns[activeGame.turnIndex];
+
+      const move = new Move(
+        AztecAddress.fromString(turn.sender),
+        turn.row,
+        turn.col,
+        activeGame.turnIndex,
+        BigInt(turn.gameId)
+      );
+
+      await activeChannel.turn(move);
+      await activeChannel.finalize();
+    }
+
     setTriggeringTimeout(false);
     // Put websocket functionality here
     socket.emit('game:timeoutTriggered', (res: any) => {

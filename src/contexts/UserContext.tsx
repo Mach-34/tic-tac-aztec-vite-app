@@ -149,7 +149,7 @@ export const UserProvider: React.FC<{ children: JSX.Element }> = ({
       const data = await res.json();
       if (data.game) {
         const deserialized = deserializeGame(data.game);
-        deserialized.timeout = getTimeout(data.game.gameId, wallet);
+        deserialized.timeout = await getTimeout(data.game.gameId, wallet);
         setActiveGame(deserialized);
         initializeChannel(deserialized);
       }

@@ -1,5 +1,5 @@
 // TODO: Move to env
-export const TIC_TAC_TOE_CONTRACT = '0x254d12df6b56a4b1070a7947de2e68f7a9752ee6aca18fb356b969cbc6975072';
+export const TIC_TAC_TOE_CONTRACT = '0x1898964ebe64f57d29644f372b81d46494dcab70384777ff5fa3237b09e636dd';
 
 export const WINNING_PLACEMENTS = [
     [0, 1, 2], [3, 4, 5], [6, 7, 8],

@@ -38,9 +38,5 @@ export const getTimeout = async (gameId: string, wallet: Wallet) => {
     const noteHash = await contract.methods
         .get_game_note_hash(BigInt(gameId))
         .view();
-    const board = await contract.methods.get_board(BigInt(gameId)).view();
-    console.log('Board: ', board);
-    const res = await contract.methods.get_timeout(noteHash).view();
-    console.log('Res: ', res);
-    return res;
+    return await contract.methods.get_timeout(noteHash).view();
 };
