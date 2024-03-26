@@ -49,9 +49,9 @@ const UserContext = createContext<UserContextType>({
   incrementNonce: () => null,
   initializeChannel: () => null,
   nonce: 0,
-  setActiveChannel: () => { },
-  setActiveGame: () => { },
-  signIn: async (_key: string) => { },
+  setActiveChannel: () => {},
+  setActiveGame: () => {},
+  signIn: async (_key: string) => {},
   contract: null,
   signingIn: false,
   signedIn: false,
@@ -82,11 +82,7 @@ export const UserProvider: React.FC<{ children: JSX.Element }> = ({
     if (!wallet || !contract) return;
     // Restore channel
     // todo: replace with state channel
-    const channel = new BaseStateChannel(
-      wallet,
-      contract,
-      BigInt(game.gameId),
-    );
+    const channel = new BaseStateChannel(wallet, contract, BigInt(game.gameId));
 
     channel.openChannelResult = game.executionResults.open;
     channel.orchestratorResult = game.executionResults.orchestrator;
@@ -116,7 +112,7 @@ export const UserProvider: React.FC<{ children: JSX.Element }> = ({
         await account.deploy().then(async (res) => await res.wait());
       } catch (e) {
         // probably already deployed
-        console.log("Account already deployed");
+        console.log('Account already deployed');
       }
       // register the account in the PXE
       wallet = await account.register();
@@ -133,8 +129,10 @@ export const UserProvider: React.FC<{ children: JSX.Element }> = ({
     const { nonce: nonceRes } = await res.json();
 
     // get contract address
-    const { address: contractAddress } = await fetch(`${API_URL}/game/contract`).then(async (res) => await res.json());
-    console.log("Got address: ", contractAddress);
+    const { address: contractAddress } = await fetch(
+      `${API_URL}/game/contract`
+    ).then(async (res) => await res.json());
+    console.log('Got address: ', contractAddress);
 
     // set state
     setWallet(wallet);
@@ -144,9 +142,9 @@ export const UserProvider: React.FC<{ children: JSX.Element }> = ({
   };
 
   useEffect(() => {
-    if (!wallet) return;
+    if (!contract || !wallet) return;
     (async () => {
-      const res = await fetch(`${SERVER_URL}/game/in-game`, {
+      const res = await fetch(`${API_URL}/game/in-game`, {
         headers: {
           'X-Address': wallet.getCompleteAddress().address.toString(),
         },

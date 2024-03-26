@@ -20,7 +20,7 @@ export default function Game(): JSX.Element {
     initializeChannel,
     setActiveGame,
     signingIn,
-    contract
+    contract,
   } = useUser();
   const navigate = useNavigate();
   const [board, setBoard] = useState<number[]>([]);
@@ -186,6 +186,8 @@ export default function Game(): JSX.Element {
       challengerOpenSignature
     );
 
+    console.log('Open chamnnel: ', openChannelResult);
+
     socket.emit(
       'game:openChannel',
       {
@@ -310,7 +312,7 @@ export default function Game(): JSX.Element {
   };
 
   const triggerTimeout = async () => {
-    if (!activeChannel || !socket || !wallet) return;
+    if (!activeChannel || !contract || !socket || !wallet) return;
     setTriggeringTimeout(true);
     const res = await activeChannel.finalize();
     console.log('Res: ', res);
@@ -379,7 +381,7 @@ export default function Game(): JSX.Element {
                         ))}
                       {isHovering &&
                         (activeGame.host ===
-                          wallet?.getCompleteAddress().address.toString() ? (
+                        wallet?.getCompleteAddress().address.toString() ? (
                           <X className='opacity-60' color='#2D2047' size={60} />
                         ) : (
                           <Circle
