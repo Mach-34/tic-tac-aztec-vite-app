@@ -4,10 +4,10 @@ import { Circle, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useUser } from 'contexts/UserContext';
 import Button from 'components/Button';
-import { Move } from 'utils';
+import { Move } from '@mach-34/aztec-statechannel-tictactoe';
 import { useSocket } from 'contexts/SocketContext';
 import { AztecAddress } from '@aztec/circuits.js';
-import { deserializeGame, getTimeout } from 'utils/game';
+import { deserializeGame, getTimeout } from 'utils';
 import { WINNING_PLACEMENTS } from 'utils/constants';
 // import DuplicationFraudModal from './components/DuplicationFraudModal';
 
@@ -20,6 +20,7 @@ export default function Game(): JSX.Element {
     initializeChannel,
     setActiveGame,
     signingIn,
+    contract,
   } = useUser();
   const navigate = useNavigate();
   const [board, setBoard] = useState<number[]>([]);
@@ -85,7 +86,7 @@ export default function Game(): JSX.Element {
       BigInt(turn.gameId)
     );
 
-    const signature = move.sign(wallet.getEncryptionPrivateKey());
+    const signature = move.sign(wallet);
 
     socket.emit(
       'game:signOpponentTurn',
@@ -184,6 +185,8 @@ export default function Game(): JSX.Element {
     const openChannelResult = await activeChannel.openChannel(
       challengerOpenSignature
     );
+
+    console.log('Open chamnnel: ', openChannelResult);
 
     socket.emit(
       'game:openChannel',
@@ -290,15 +293,9 @@ export default function Game(): JSX.Element {
     if (!activeChannel || !socket) return;
     const turn = activeGame.turns[activeGame.turnIndex];
 
-    const move = new Move(
-      AztecAddress.fromString(turn.sender),
-      turn.row,
-      turn.col,
-      activeGame.turnIndex,
-      BigInt(turn.gameId)
-    );
-
+    const move = activeChannel.buildMove(turn.row, turn.col);
     const turnResult = await activeChannel.turn(move, turn.opponentSignature);
+
     socket.emit(
       'game:finalizeTurn',
       {
@@ -315,7 +312,7 @@ export default function Game(): JSX.Element {
   };
 
   const triggerTimeout = async () => {
-    if (!activeChannel || !socket || !wallet) return;
+    if (!activeChannel || !contract || !socket || !wallet) return;
     setTriggeringTimeout(true);
     const res = await activeChannel.finalize();
     console.log('Res: ', res);
@@ -324,7 +321,7 @@ export default function Game(): JSX.Element {
     socket.emit('game:timeoutTriggered', (res: any) => {
       if (res.status === 'success') {
         const deserialized = deserializeGame(activeGame);
-        deserialized.timeouit = getTimeout(activeGame.gameId, wallet);
+        deserialized.timeouit = getTimeout(activeGame.gameId, wallet, contract);
         setActiveGame(deserialized);
       }
     });
