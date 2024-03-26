@@ -16,8 +16,9 @@ import {
 import { getSchnorrAccount } from '@aztec/accounts/schnorr';
 import { useSocket } from './SocketContext';
 import { BaseStateChannel } from 'utils/baseChannel';
-import { TIC_TAC_TOE_CONTRACT } from 'utils/constants';
+import { PXE_URL, SERVER_URL } from 'utils/constants';
 import { deserializeGame, getTimeout } from 'utils/game';
+const { REACT_APP_API_URL: API_URL } = process.env;
 
 // type Game = {
 //   challenger: string;
@@ -32,11 +33,11 @@ type UserContextType = {
   activeGame: any;
   incrementNonce: () => void;
   initializeChannel: (game: any) => void;
-  // account: AccountWalletWithPrivateKey | null;
   nonce: number;
   setActiveChannel: Dispatch<SetStateAction<BaseStateChannel | null>>;
   setActiveGame: Dispatch<SetStateAction<any>>;
   signIn: (key: string) => Promise<void>;
+  contract: AztecAddress | null;
   signingIn: boolean;
   signedIn: boolean;
 };
@@ -48,9 +49,10 @@ const UserContext = createContext<UserContextType>({
   incrementNonce: () => null,
   initializeChannel: () => null,
   nonce: 0,
-  setActiveChannel: () => {},
-  setActiveGame: () => {},
-  signIn: async (_key: string) => {},
+  setActiveChannel: () => { },
+  setActiveGame: () => { },
+  signIn: async (_key: string) => { },
+  contract: null,
   signingIn: false,
   signedIn: false,
 });
@@ -70,19 +72,20 @@ export const UserProvider: React.FC<{ children: JSX.Element }> = ({
     null
   );
   const [signingIn, setSigningIn] = useState(false);
+  const [contract, setContract] = useState<AztecAddress | null>(null);
 
   const incrementNonce = () => {
     setNonce((prev) => prev + 1);
   };
 
   const initializeChannel = (game: any) => {
-    if (!wallet) return;
+    if (!wallet || !contract) return;
     // Restore channel
     // todo: replace with state channel
     const channel = new BaseStateChannel(
       wallet.getCompleteAddress().address,
       wallet.getEncryptionPrivateKey(),
-      AztecAddress.fromString(TIC_TAC_TOE_CONTRACT),
+      contract,
       BigInt(game.gameId),
       wallet
     );
@@ -98,7 +101,6 @@ export const UserProvider: React.FC<{ children: JSX.Element }> = ({
     setSigningIn(true);
 
     // Connect to PXE
-    const PXE_URL = 'http://localhost:8080';
     const pxe = createPXEClient(PXE_URL);
     await waitForPXE(pxe);
 
@@ -116,7 +118,7 @@ export const UserProvider: React.FC<{ children: JSX.Element }> = ({
         await account.deploy().then(async (res) => await res.wait());
       } catch (e) {
         // probably already deployed
-        console.log('Error deploying account: ', e);
+        console.log("Account already deployed");
       }
       // register the account in the PXE
       wallet = await account.register();
@@ -125,23 +127,28 @@ export const UserProvider: React.FC<{ children: JSX.Element }> = ({
     }
 
     // login to the server
-    const res = await fetch(`http://localhost:8000/user/nonce`, {
+    const res = await fetch(`${API_URL}/user/nonce`, {
       headers: {
         'X-Address': address.toString(),
       },
     });
     const { nonce: nonceRes } = await res.json();
 
+    // get contract address
+    const { address: contractAddress } = await fetch(`${API_URL}/game/contract`).then(async (res) => await res.json());
+    console.log("Got address: ", contractAddress);
+
     // set state
     setWallet(wallet);
     setNonce(nonceRes);
+    setContract(AztecAddress.fromString(contractAddress));
     setSigningIn(false);
   };
 
   useEffect(() => {
     if (!wallet) return;
     (async () => {
-      const res = await fetch(`http://localhost:8000/game/in-game`, {
+      const res = await fetch(`${SERVER_URL}/game/in-game`, {
         headers: {
           'X-Address': wallet.getCompleteAddress().address.toString(),
         },
@@ -149,7 +156,7 @@ export const UserProvider: React.FC<{ children: JSX.Element }> = ({
       const data = await res.json();
       if (data.game) {
         const deserialized = deserializeGame(data.game);
-        deserialized.timeout = getTimeout(data.game.gameId, wallet);
+        deserialized.timeout = getTimeout(data.game.gameId, wallet, contract);
         setActiveGame(deserialized);
         initializeChannel(deserialized);
       }
@@ -173,7 +180,7 @@ export const UserProvider: React.FC<{ children: JSX.Element }> = ({
 
     const handleTimeoutTriggered = (data: any) => {
       const deserialized = deserializeGame(data);
-      deserialized.timeout = getTimeout(deserialized.gameId, wallet);
+      deserialized.timeout = getTimeout(deserialized.gameId, wallet, contract);
       setActiveGame(deserialized);
       initializeChannel(deserialized);
     };
@@ -226,6 +233,7 @@ export const UserProvider: React.FC<{ children: JSX.Element }> = ({
         setActiveChannel,
         setActiveGame,
         signIn,
+        contract,
         signingIn,
         signedIn: !!wallet,
       }}

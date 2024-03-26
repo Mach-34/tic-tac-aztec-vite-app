@@ -4,7 +4,6 @@ import { AztecAddress, Fr } from "@aztec/circuits.js";
 import { pedersenHash } from "@aztec/foundation/crypto";
 import { TicTacToeContract } from 'artifacts/TicTacToe.js';
 import { Wallet } from "@aztec/aztec.js";
-import { TIC_TAC_TOE_CONTRACT } from "./constants";
 
 // TODO: Get rid of any
 export const deserializeGame = (game: any) => {
@@ -29,10 +28,10 @@ export const genAztecId = (challenger: AztecAddress, host: AztecAddress) => {
     return `0x${pedersenHash(input).toString('hex')}`;
 }
 
-export const getTimeout = async (gameId: string, wallet: Wallet) => {
+export const getTimeout = async (gameId: string, wallet: Wallet, address: AztecAddress) => {
     if (!wallet) return;
     const contract = await TicTacToeContract.at(
-        AztecAddress.fromString(TIC_TAC_TOE_CONTRACT),
+        address,
         wallet
     );
     const noteHash = await contract.methods

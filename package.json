@@ -12,8 +12,8 @@
   "dependencies": {
     "@aztec/accounts": "file:../../aztec-packages/yarn-project/accounts",
     "@aztec/aztec.js": "file:../../aztec-packages/yarn-project/aztec.js",
-    "@aztec/circuits.js": "file:../../aztec-packages/yarn-project/circuits.js",
     "@aztec/circuit-types": "file:../../aztec-packages/yarn-project/circuit-types",
+    "@aztec/circuits.js": "file:../../aztec-packages/yarn-project/circuits.js",
     "@aztec/foundation": "file:../../aztec-packages/yarn-project/foundation",
     "@aztec/types": "file:../../aztec-packages/yarn-project/types",
     "@radix-ui/react-dialog": "^1.0.5",
@@ -28,6 +28,7 @@
   },
   "devDependencies": {
     "@esbuild-plugins/node-globals-polyfill": "^0.2.3",
+    "@rollup/rollup-linux-x64-gnu": "^4.13.0",
     "@types/react": "^18.2.56",
     "@types/react-dom": "^18.2.19",
     "@typescript-eslint/eslint-plugin": "^7.0.2",

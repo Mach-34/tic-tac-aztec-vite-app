@@ -20,6 +20,7 @@ export default function Game(): JSX.Element {
     initializeChannel,
     setActiveGame,
     signingIn,
+    contract
   } = useUser();
   const navigate = useNavigate();
   const [board, setBoard] = useState<number[]>([]);
@@ -324,7 +325,7 @@ export default function Game(): JSX.Element {
     socket.emit('game:timeoutTriggered', (res: any) => {
       if (res.status === 'success') {
         const deserialized = deserializeGame(activeGame);
-        deserialized.timeouit = getTimeout(activeGame.gameId, wallet);
+        deserialized.timeouit = getTimeout(activeGame.gameId, wallet, contract);
         setActiveGame(deserialized);
       }
     });
@@ -384,7 +385,7 @@ export default function Game(): JSX.Element {
                         ))}
                       {isHovering &&
                         (activeGame.host ===
-                        wallet?.getCompleteAddress().address.toString() ? (
+                          wallet?.getCompleteAddress().address.toString() ? (
                           <X className='opacity-60' color='#2D2047' size={60} />
                         ) : (
                           <Circle
