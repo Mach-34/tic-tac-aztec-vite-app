@@ -2,7 +2,7 @@ import { AppExecutionResult } from "@aztec/circuit-types";
 import { SchnorrSignature } from "@aztec/circuits.js/barretenberg";
 import { AztecAddress, Fr } from "@aztec/circuits.js";
 import { pedersenHash } from "@aztec/foundation/crypto";
-import { TicTacToeContract } from 'artifacts/TicTacToe.js';
+import { TicTacToeContract } from '@mach-34/aztec-statechannel-tictactoe';
 import { Wallet } from "@aztec/aztec.js";
 
 // TODO: Get rid of any

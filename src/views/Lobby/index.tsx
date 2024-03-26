@@ -5,8 +5,8 @@ import { useUser } from 'contexts/UserContext';
 import { useCallback, useEffect, useState } from 'react';
 import { useSocket } from 'contexts/SocketContext';
 import { useNavigate } from 'react-router-dom';
-import { BaseStateChannel } from 'utils/baseChannel';
 import { AztecAddress } from '@aztec/aztec.js';
+import { BaseStateChannel } from '@mach-34/aztec-statechannel-tictactoe';
 import { deserializeGame, genAztecId } from 'utils/game';
 
 const { REACT_APP_API_URL: API_URL } = process.env;
@@ -34,8 +34,7 @@ export default function Lobby(): JSX.Element {
 
     // Sign open channel as guest
     const guestChannelOpenSignature = BaseStateChannel.signOpenChannel(
-      address,
-      wallet.getEncryptionPrivateKey(),
+      wallet,
       AztecAddress.fromString(opponent),
       true
     );

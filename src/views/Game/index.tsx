@@ -291,15 +291,9 @@ export default function Game(): JSX.Element {
     if (!activeChannel || !socket) return;
     const turn = activeGame.turns[activeGame.turnIndex];
 
-    const move = new Move(
-      AztecAddress.fromString(turn.sender),
-      turn.row,
-      turn.col,
-      activeGame.turnIndex,
-      BigInt(turn.gameId)
-    );
-
+    const move = activeChannel.buildMove(turn.row, turn.col);
     const turnResult = await activeChannel.turn(move, turn.opponentSignature);
+    
     socket.emit(
       'game:finalizeTurn',
       {

@@ -16,6 +16,7 @@
     "@aztec/circuits.js": "file:../../aztec-packages/yarn-project/circuits.js",
     "@aztec/foundation": "file:../../aztec-packages/yarn-project/foundation",
     "@aztec/types": "file:../../aztec-packages/yarn-project/types",
+    "@mach-34/aztec-statechannel-tictactoe": "file:../../aztec-state-channels",
     "@radix-ui/react-dialog": "^1.0.5",
     "esbuild-plugins-node-modules-polyfill": "^1.6.3",
     "lucide-react": "^0.338.0",
@@ -40,7 +41,7 @@
     "eslint-plugin-react-refresh": "^0.4.5",
     "postcss": "^8.4.35",
     "tailwindcss": "^3.4.1",
-    "typescript": "^5.2.2",
+    "typescript": "^5.4.3",
     "vite": "5.1.4"
   }
 }

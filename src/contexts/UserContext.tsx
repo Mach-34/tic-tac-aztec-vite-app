@@ -15,7 +15,7 @@ import {
 } from '@aztec/aztec.js';
 import { getSchnorrAccount } from '@aztec/accounts/schnorr';
 import { useSocket } from './SocketContext';
-import { BaseStateChannel } from 'utils/baseChannel';
+import { BaseStateChannel } from '@mach-34/aztec-statechannel-tictactoe';
 import { PXE_URL, SERVER_URL } from 'utils/constants';
 import { deserializeGame, getTimeout } from 'utils/game';
 const { REACT_APP_API_URL: API_URL } = process.env;
@@ -83,11 +83,9 @@ export const UserProvider: React.FC<{ children: JSX.Element }> = ({
     // Restore channel
     // todo: replace with state channel
     const channel = new BaseStateChannel(
-      wallet.getCompleteAddress().address,
-      wallet.getEncryptionPrivateKey(),
+      wallet,
       contract,
       BigInt(game.gameId),
-      wallet
     );
 
     channel.openChannelResult = game.executionResults.open;

@@ -5,10 +5,10 @@ import { AztecAddress, Fr, GrumpkinScalar } from "@aztec/circuits.js";
 /**
  * Converts a number to a 32 byte hex string so structure mirrors Noir's for accurate hashing
  *
- * @param {BigInt | number} num - number to be hexlified
+ * @param {bigint | number} num - number to be hexlified
  * @returns 32 bytes hex string
  */
-export const numToHex = (num: BigInt | number) => {
+export const numToHex = (num: bigint | number) => {
     // Add missing padding based of hex number length
     return num.toString(16).padStart(64, "0");
 };
@@ -30,8 +30,8 @@ export const serializeSignature = (signature: Uint8Array) => {
 
 
 export const signOpenChannel = (privkey: GrumpkinScalar, host: string, challenger: string) => {
-    let hostAddress = AztecAddress.fromString(host).toBuffer();
-    let challengerAddress = AztecAddress.fromString(challenger).toBuffer();
+    const hostAddress = AztecAddress.fromString(host).toBuffer();
+    const challengerAddress = AztecAddress.fromString(challenger).toBuffer();
 
     const channelMsg = new Uint8Array(64);
     channelMsg.set(Uint8Array.from(hostAddress), 0);
@@ -67,5 +67,4 @@ export const signTurn = (privkey: GrumpkinScalar, sender: string, gameId: Fr, tu
     return signSchnorr(moveMsg, privkey);
 };
 
-export * from "./capsule.ts";
 export * from "./move.ts";
