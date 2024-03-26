@@ -6,10 +6,12 @@ import { useState } from 'react';
 import { useUser } from 'contexts/UserContext';
 import { RefreshCcw } from 'lucide-react';
 import { GrumpkinScalar } from '@aztec/aztec.js';
+import useCountdown from 'hooks/useCountdown';
 
 export default function Header(): JSX.Element {
   const { pathname } = useLocation();
   const { activeGame, signIn, signedIn, signingIn } = useUser();
+  const countdown = useCountdown(Number(activeGame?.timeout ?? 0));
   const [key, setKey] = useState('');
   const [showSignInModal, setShowSignInModal] = useState(false);
 
@@ -21,6 +23,8 @@ export default function Header(): JSX.Element {
     await signIn(key);
     setShowSignInModal(false);
   };
+
+  console.log('Timestamp: ', activeGame?.timeout ?? 0);
 
   return (
     <div className='bg-[#2D2047] flex items-center justify-between p-4'>

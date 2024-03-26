@@ -16,6 +16,7 @@ export default defineConfig(({ mode }) => {
         assets: "/src/assets",
         components: "/src/components",
         contexts: "/src/contexts",
+        hooks: "/src/hooks",
         layouts: "/src/layouts",
         utils: "/src/utils",
         views: "/src/views",
