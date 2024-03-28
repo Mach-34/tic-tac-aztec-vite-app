@@ -1,17 +1,22 @@
 import Button from 'components/Button';
 import { Link, useLocation } from 'react-router-dom';
-import { KeyRound, User } from 'lucide-react';
+import { Clock, KeyRound, RefreshCcw, User } from 'lucide-react';
 import Modal from 'components/Modal';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useUser } from 'contexts/UserContext';
-import { RefreshCcw } from 'lucide-react';
 import { GrumpkinScalar } from '@aztec/aztec.js';
+import useCountdown from 'hooks/useCountdown';
 
 export default function Header(): JSX.Element {
   const { pathname } = useLocation();
   const { activeGame, signIn, signedIn, signingIn } = useUser();
+  const countdown = useCountdown(Number(activeGame?.timeout ?? 0));
   const [key, setKey] = useState('');
   const [showSignInModal, setShowSignInModal] = useState(false);
+
+  const gameRoute = useMemo(() => {
+    return pathname.includes('/game');
+  }, [pathname]);
 
   const genGrumpkin = () => {
     setKey(GrumpkinScalar.random().toString());
@@ -28,7 +33,13 @@ export default function Header(): JSX.Element {
         Tic-Tac-Aztec
       </Link>
       <div className='flex gap-2 items-center'>
-        {!!activeGame && !pathname.includes('/game') && (
+        {activeGame?.timeout > 0n && (
+          <div className='bg-[#946DF2] flex gap-2 items-center px-2 rounded-xl'>
+            {countdown.minutes}:{countdown.seconds}
+            <Clock size={18} />
+          </div>
+        )}
+        {!!activeGame && !gameRoute && (
           <Link className='bg-red rounded text-white' to='/game/pending'>
             Go to game
           </Link>

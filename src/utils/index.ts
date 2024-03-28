@@ -5,6 +5,18 @@ import { pedersenHash } from "@aztec/foundation/crypto";
 import { TicTacToeContract } from '@mach-34/aztec-statechannel-tictactoe';
 import { Wallet } from "@aztec/aztec.js";
 
+export const answerTimeout = async (gameId: string, wallet: Wallet, address: AztecAddress, row: number, col: number) => {
+    if (!wallet) return;
+    const contract = await TicTacToeContract.at(
+        address,
+        wallet
+    );
+    await contract.methods
+        .answer_timeout(BigInt(gameId), row, col)
+        .send()
+        .wait();
+}
+
 // TODO: Get rid of any
 export const deserializeGame = (game: any) => {
     const challengerOpenSignature = game.challengerOpenSignature;
@@ -28,6 +40,15 @@ export const genAztecId = (challenger: AztecAddress, host: AztecAddress) => {
     return `0x${pedersenHash(input).toString('hex')}`;
 }
 
+export const getAztecGameState = async (gameId: string, wallet: Wallet, address: AztecAddress) => {
+    const contract = await TicTacToeContract.at(
+        address,
+        wallet
+    );
+    const board = await contract.methods.get_board(BigInt(gameId)).view();
+    return board;
+}
+
 export const getTimeout = async (gameId: string, wallet: Wallet, address: AztecAddress) => {
     if (!wallet) return;
     const contract = await TicTacToeContract.at(
@@ -37,9 +58,15 @@ export const getTimeout = async (gameId: string, wallet: Wallet, address: AztecA
     const noteHash = await contract.methods
         .get_game_note_hash(BigInt(gameId))
         .view();
-    const board = await contract.methods.get_board(BigInt(gameId)).view();
-    console.log('Board: ', board);
-    const res = await contract.methods.get_timeout(noteHash).view();
-    console.log('Res: ', res);
-    return res;
+    const timeout = await contract.methods.get_timeout(noteHash).view();
+    return timeout ? timeout + 600n : 0;
+};
+
+export const triggerManualTimeout = async (gameId: string, wallet: Wallet, address: AztecAddress) => {
+    if (!wallet) return;
+    const contract = await TicTacToeContract.at(
+        address,
+        wallet
+    );
+    await contract.methods.trigger_timeout(BigInt(gameId)).send().wait()
 };

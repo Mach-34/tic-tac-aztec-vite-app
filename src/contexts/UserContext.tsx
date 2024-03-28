@@ -15,9 +15,12 @@ import {
 } from '@aztec/aztec.js';
 import { getSchnorrAccount } from '@aztec/accounts/schnorr';
 import { useSocket } from './SocketContext';
-import { BaseStateChannel } from '@mach-34/aztec-statechannel-tictactoe';
+import {
+  BaseStateChannel,
+  ContinuedStateChannel,
+} from '@mach-34/aztec-statechannel-tictactoe';
 import { PXE_URL } from 'utils/constants';
-import { deserializeGame, getTimeout } from 'utils';
+import { deserializeGame, getAztecGameState, getTimeout } from 'utils';
 const { REACT_APP_API_URL: API_URL } = process.env;
 
 // type Game = {
@@ -27,34 +30,36 @@ const { REACT_APP_API_URL: API_URL } = process.env;
 //   id: string;
 // };
 
+enum TTZSocketEvent {}
+
+type StateChannel = BaseStateChannel | ContinuedStateChannel;
+
 type UserContextType = {
-  wallet: AccountWalletWithPrivateKey | null;
-  activeChannel: BaseStateChannel | null;
+  activeChannel: StateChannel | null;
   activeGame: any;
-  incrementNonce: () => void;
-  initializeChannel: (game: any) => void;
-  nonce: number;
-  setActiveChannel: Dispatch<SetStateAction<BaseStateChannel | null>>;
-  setActiveGame: Dispatch<SetStateAction<any>>;
-  signIn: (key: string) => Promise<void>;
   contract: AztecAddress | null;
+  initializeChannel: (game: any, startTurn?: number) => void;
+  latestPostedTurn: number;
+  setActiveGame: Dispatch<SetStateAction<any>>;
+  setLatestPostedTurn: Dispatch<SetStateAction<number>>;
+  signIn: (key: string) => Promise<void>;
   signingIn: boolean;
   signedIn: boolean;
+  wallet: AccountWalletWithPrivateKey | null;
 };
 
 const UserContext = createContext<UserContextType>({
-  wallet: null,
   activeChannel: null,
   activeGame: null,
-  incrementNonce: () => null,
-  initializeChannel: () => null,
-  nonce: 0,
-  setActiveChannel: () => {},
-  setActiveGame: () => {},
-  signIn: async (_key: string) => {},
   contract: null,
+  initializeChannel: () => null,
+  latestPostedTurn: -1,
+  setActiveGame: () => {},
+  setLatestPostedTurn: () => {},
+  signIn: async (_key: string) => {},
   signingIn: false,
   signedIn: false,
+  wallet: null,
 });
 
 export const UserProvider: React.FC<{ children: JSX.Element }> = ({
@@ -63,34 +68,38 @@ export const UserProvider: React.FC<{ children: JSX.Element }> = ({
   const socket = useSocket();
 
   // const { REACT_APP_API_KEY } = process.env;
-  const [activeChannel, setActiveChannel] = useState<BaseStateChannel | null>(
-    null
-  );
+  const [activeChannel, setActiveChannel] = useState<StateChannel | null>(null);
   const [activeGame, setActiveGame] = useState<any>(null);
-  const [nonce, setNonce] = useState(0);
+  const [contract, setContract] = useState<AztecAddress | null>(null);
+  const [latestPostedTurn, setLatestPostedTurn] = useState(0);
+  const [signingIn, setSigningIn] = useState(false);
   const [wallet, setWallet] = useState<AccountWalletWithPrivateKey | null>(
     null
   );
-  const [signingIn, setSigningIn] = useState(false);
-  const [contract, setContract] = useState<AztecAddress | null>(null);
 
-  const incrementNonce = () => {
-    setNonce((prev) => prev + 1);
-  };
-
-  const initializeChannel = (game: any) => {
+  const initializeChannel = (game: any, startTurn?: number) => {
     if (!wallet || !contract) return;
-    // Restore channel
-    // todo: replace with state channel
-    const channel = new BaseStateChannel(wallet, contract, BigInt(game.gameId));
 
-    channel.openChannelResult = game.executionResults.open;
-    channel.orchestratorResult = game.executionResults.orchestrator;
-    channel.turnResults = game.executionResults.turn;
+    let channel = undefined;
+    // Restore channel
+    if (!startTurn) {
+      channel = new BaseStateChannel(wallet, contract, BigInt(game.gameId));
+      channel.openChannelResult = game.executionResults.open;
+    } else {
+      channel = new ContinuedStateChannel(
+        wallet,
+        contract,
+        BigInt(game.gameId),
+        startTurn
+      );
+    }
+    const diff = game.turnIndex - game.executionResults.turn.length;
+    channel.turnResults = game.executionResults.turn.slice(
+      startTurn ? startTurn - diff : 0
+    );
     setActiveChannel(channel);
   };
 
-  // Get current nonce
   const signIn = async (key: string) => {
     setSigningIn(true);
 
@@ -120,14 +129,6 @@ export const UserProvider: React.FC<{ children: JSX.Element }> = ({
       wallet = await account.getWallet();
     }
 
-    // login to the server
-    const res = await fetch(`${API_URL}/user/nonce`, {
-      headers: {
-        'X-Address': address.toString(),
-      },
-    });
-    const { nonce: nonceRes } = await res.json();
-
     // get contract address
     const { address: contractAddress } = await fetch(
       `${API_URL}/game/contract`
@@ -136,7 +137,6 @@ export const UserProvider: React.FC<{ children: JSX.Element }> = ({
 
     // set state
     setWallet(wallet);
-    setNonce(nonceRes);
     setContract(AztecAddress.fromString(contractAddress));
     setSigningIn(false);
   };
@@ -144,6 +144,7 @@ export const UserProvider: React.FC<{ children: JSX.Element }> = ({
   useEffect(() => {
     if (!contract || !wallet) return;
     (async () => {
+      // TODO: Read from IndexedDB
       const res = await fetch(`${API_URL}/game/in-game`, {
         headers: {
           'X-Address': wallet.getCompleteAddress().address.toString(),
@@ -151,10 +152,24 @@ export const UserProvider: React.FC<{ children: JSX.Element }> = ({
       });
       const data = await res.json();
       if (data.game) {
+        // Get latest game state posted onchain
+        const latestPostedState = await getAztecGameState(
+          data.game.gameId,
+          wallet,
+          contract
+        );
+        const lastStoredTurn = latestPostedState.turn;
+
         const deserialized = deserializeGame(data.game);
-        deserialized.timeout = getTimeout(data.game.gameId, wallet, contract);
+        deserialized.over = latestPostedState.over;
+        deserialized.timeout = await getTimeout(
+          data.game.gameId,
+          wallet,
+          contract
+        );
         setActiveGame(deserialized);
-        initializeChannel(deserialized);
+        setLatestPostedTurn(Number(lastStoredTurn));
+        initializeChannel(deserialized, Number(lastStoredTurn));
       }
     })();
   }, [wallet]);
@@ -168,17 +183,56 @@ export const UserProvider: React.FC<{ children: JSX.Element }> = ({
       initializeChannel(deserialized);
     };
 
+    const handleGameSubmitted = () => {
+      setActiveGame((prev: any) => ({ ...prev, over: true, timeout: 0n }));
+    };
+
     const handleFinalizeTurn = (data: any) => {
       const deserialized = deserializeGame(data);
       setActiveGame(deserialized);
-      initializeChannel(deserialized);
+      initializeChannel(deserialized, latestPostedTurn);
     };
 
-    const handleTimeoutTriggered = (data: any) => {
+    const handleTimeoutAnswered = async (data: any) => {
+      if (!contract) return;
+      const timeout = await getTimeout(activeGame.gameId, wallet, contract);
+      const latestPostedState = await getAztecGameState(
+        activeGame.gameId,
+        wallet,
+        contract
+      );
+      const lastStoredTurn = latestPostedState.turn;
       const deserialized = deserializeGame(data);
-      deserialized.timeout = getTimeout(deserialized.gameId, wallet, contract);
+      deserialized.timeout = timeout;
       setActiveGame(deserialized);
-      initializeChannel(deserialized);
+      setLatestPostedTurn(Number(lastStoredTurn));
+      initializeChannel(deserialized, Number(lastStoredTurn));
+    };
+
+    const handleTimeoutTriggered = async (data: any) => {
+      if (!contract) return;
+      const timeout = await getTimeout(activeGame.gameId, wallet, contract);
+      const latestPostedState = await getAztecGameState(
+        activeGame.gameId,
+        wallet,
+        contract
+      );
+      const lastStoredTurn = latestPostedState.turn;
+      setLatestPostedTurn(Number(lastStoredTurn));
+      if (data) {
+        const deserialized = deserializeGame(data);
+        deserialized.timeout = timeout;
+        setActiveGame(deserialized);
+        initializeChannel(deserialized, Number(lastStoredTurn));
+      } else {
+        setActiveGame((prev: any) => {
+          initializeChannel(prev, Number(lastStoredTurn));
+          return {
+            ...prev,
+            timeout,
+          };
+        });
+      }
     };
 
     const handleSignOpen = (data: any) => {
@@ -190,19 +244,21 @@ export const UserProvider: React.FC<{ children: JSX.Element }> = ({
     const handleSignOpponentTurn = (data: any) => {
       const deserialized = deserializeGame(data);
       setActiveGame(deserialized);
-      initializeChannel(deserialized);
+      initializeChannel(deserialized, latestPostedTurn);
     };
 
     const handleTurn = (data: any) => {
       const deserialized = deserializeGame(data);
       setActiveGame(deserialized);
-      initializeChannel(deserialized);
+      initializeChannel(deserialized, latestPostedTurn);
     };
 
     socket.on('game:join', handleGameJoin);
     socket.on('game:openChannel', handleSignOpen);
     socket.on('game:finalizeTurn', handleFinalizeTurn);
+    socket.on('game:gameSubmitted', handleGameSubmitted);
     socket.on('game:signOpponentTurn', handleSignOpponentTurn);
+    socket.on('game:timeoutAnswered', handleTimeoutAnswered);
     socket.on('game:timeoutTriggered', handleTimeoutTriggered);
     socket.on('game:turn', handleTurn);
 
@@ -211,11 +267,13 @@ export const UserProvider: React.FC<{ children: JSX.Element }> = ({
       socket.off('game:join', handleGameJoin);
       socket.off('game:openChannel', handleSignOpen);
       socket.off('game:finalizeTurn', handleFinalizeTurn);
+      socket.on('game:gameSubmitted', handleGameSubmitted);
       socket.off('game:signOpponentTurn', handleSignOpponentTurn);
+      socket.off('game:timeoutAnswered', handleTimeoutAnswered);
       socket.off('game:timeoutTriggered', handleTimeoutTriggered);
       socket.off('game:turn', handleTurn);
     };
-  }, [wallet, setActiveGame, socket]);
+  }, [activeGame, latestPostedTurn, wallet, setActiveGame, socket]);
 
   return (
     <UserContext.Provider
@@ -223,11 +281,10 @@ export const UserProvider: React.FC<{ children: JSX.Element }> = ({
         wallet,
         activeChannel,
         activeGame,
-        incrementNonce,
         initializeChannel,
-        nonce,
-        setActiveChannel,
+        latestPostedTurn,
         setActiveGame,
+        setLatestPostedTurn,
         signIn,
         contract,
         signingIn,
