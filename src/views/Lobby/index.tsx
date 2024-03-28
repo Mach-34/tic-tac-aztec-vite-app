@@ -78,22 +78,23 @@ export default function Lobby(): JSX.Element {
 
   const startGame = async () => {
     if (!wallet || !socket) return;
+    // console.log('Start game: ', );
     // Emit start game event
-    socket.emit(
-      'game:start',
-      { address: wallet.getCompleteAddress().address.toString() },
-      (res: any) => {
-        if (res.status === 'success') {
-          const deserialized = deserializeGame(res.game);
-          setActiveGame(deserialized);
-          initializeChannel(deserialized);
-          // TODO: Figure out why this isn't working
-          navigate('/game/pending');
-        } else {
-          // TODO: Handle error case
-        }
-      }
-    );
+    // socket.emit(
+    //   'game:start',
+    //   { address: wallet.getCompleteAddress().address.toString() },
+    //   (res: any) => {
+    //     if (res.status === 'success') {
+    //       const deserialized = deserializeGame(res.game);
+    //       setActiveGame(deserialized);
+    //       initializeChannel(deserialized);
+    //       // TODO: Figure out why this isn't working
+    //       navigate('/game/pending');
+    //     } else {
+    //       // TODO: Handle error case
+    //     }
+    //   }
+    // );
   };
 
   useEffect(() => {

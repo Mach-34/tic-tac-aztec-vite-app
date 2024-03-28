@@ -21,14 +21,23 @@ import {
 } from '@mach-34/aztec-statechannel-tictactoe';
 import { PXE_URL } from 'utils/constants';
 import { deserializeGame, getAztecGameState, getTimeout } from 'utils';
+import { SchnorrSignature } from '@aztec/circuits.js/barretenberg';
 const { REACT_APP_API_URL: API_URL } = process.env;
 
-// type Game = {
-//   challenger: string;
-//   host: string;
-//   status: string;
-//   id: string;
-// };
+type StateChannel = BaseStateChannel | ContinuedStateChannel;
+
+type Game = {
+  challenger: string;
+  challengerOpenSignature: SchnorrSignature;
+  channel: StateChannel | undefined;
+  host: string;
+  id: string;
+  lastPostedTurn: number;
+  timeout: number;
+  // @TODO: Remove any
+  turns: any[];
+  turnIndex: number;
+};
 
 export enum TTZSocketEvent {
   AnswerTimeout = 'game:answerTimeout',
@@ -42,8 +51,6 @@ export enum TTZSocketEvent {
   TriggerTimeout = 'game:triggerTimeout',
   Turn = 'game:turn',
 }
-
-type StateChannel = BaseStateChannel | ContinuedStateChannel;
 
 type UserContextType = {
   activeChannel: StateChannel | null;
