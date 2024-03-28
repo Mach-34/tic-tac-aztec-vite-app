@@ -30,7 +30,18 @@ const { REACT_APP_API_URL: API_URL } = process.env;
 //   id: string;
 // };
 
-enum TTZSocketEvent {}
+export enum TTZSocketEvent {
+  AnswerTimeout = 'game:answerTimeout',
+  OpenChannel = 'game:openChannel',
+  JoinGame = 'game:join',
+  // @TODO: Come up with better name
+  FinalizeTurn = 'game:finalizeTurn',
+  StartGame = 'game:start',
+  SignOpponentTurn = 'game:signOpponentTurn',
+  SubmitGame = 'game:submit',
+  TriggerTimeout = 'game:triggerTimeout',
+  Turn = 'game:turn',
+}
 
 type StateChannel = BaseStateChannel | ContinuedStateChannel;
 
@@ -183,7 +194,7 @@ export const UserProvider: React.FC<{ children: JSX.Element }> = ({
       initializeChannel(deserialized);
     };
 
-    const handleGameSubmitted = () => {
+    const handleSubmittedGame = () => {
       setActiveGame((prev: any) => ({ ...prev, over: true, timeout: 0n }));
     };
 
@@ -253,25 +264,25 @@ export const UserProvider: React.FC<{ children: JSX.Element }> = ({
       initializeChannel(deserialized, latestPostedTurn);
     };
 
-    socket.on('game:join', handleGameJoin);
-    socket.on('game:openChannel', handleSignOpen);
-    socket.on('game:finalizeTurn', handleFinalizeTurn);
-    socket.on('game:gameSubmitted', handleGameSubmitted);
-    socket.on('game:signOpponentTurn', handleSignOpponentTurn);
-    socket.on('game:timeoutAnswered', handleTimeoutAnswered);
-    socket.on('game:timeoutTriggered', handleTimeoutTriggered);
-    socket.on('game:turn', handleTurn);
+    socket.on(TTZSocketEvent.JoinGame, handleGameJoin);
+    socket.on(TTZSocketEvent.OpenChannel, handleSignOpen);
+    socket.on(TTZSocketEvent.FinalizeTurn, handleFinalizeTurn);
+    socket.on(TTZSocketEvent.SubmitGame, handleSubmittedGame);
+    socket.on(TTZSocketEvent.SignOpponentTurn, handleSignOpponentTurn);
+    socket.on(TTZSocketEvent.AnswerTimeout, handleTimeoutAnswered);
+    socket.on(TTZSocketEvent.TriggerTimeout, handleTimeoutTriggered);
+    socket.on(TTZSocketEvent.Turn, handleTurn);
 
     // Clean up event listeners
     return () => {
-      socket.off('game:join', handleGameJoin);
-      socket.off('game:openChannel', handleSignOpen);
-      socket.off('game:finalizeTurn', handleFinalizeTurn);
-      socket.on('game:gameSubmitted', handleGameSubmitted);
-      socket.off('game:signOpponentTurn', handleSignOpponentTurn);
-      socket.off('game:timeoutAnswered', handleTimeoutAnswered);
-      socket.off('game:timeoutTriggered', handleTimeoutTriggered);
-      socket.off('game:turn', handleTurn);
+      socket.off(TTZSocketEvent.JoinGame, handleGameJoin);
+      socket.off(TTZSocketEvent.OpenChannel, handleSignOpen);
+      socket.off(TTZSocketEvent.FinalizeTurn, handleFinalizeTurn);
+      socket.on(TTZSocketEvent.SubmitGame, handleSubmittedGame);
+      socket.off(TTZSocketEvent.SignOpponentTurn, handleSignOpponentTurn);
+      socket.off(TTZSocketEvent.AnswerTimeout, handleTimeoutAnswered);
+      socket.off(TTZSocketEvent.TriggerTimeout, handleTimeoutTriggered);
+      socket.off(TTZSocketEvent.Turn, handleTurn);
     };
   }, [activeGame, latestPostedTurn, wallet, setActiveGame, socket]);
 

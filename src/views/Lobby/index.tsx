@@ -1,7 +1,7 @@
 import Button from 'components/Button';
 import MainLayout from '../../layouts/MainLayout';
 import { Play } from 'lucide-react';
-import { useUser } from 'contexts/UserContext';
+import { TTZSocketEvent, useUser } from 'contexts/UserContext';
 import { useCallback, useEffect, useState } from 'react';
 import { useSocket } from 'contexts/SocketContext';
 import { useNavigate } from 'react-router-dom';
@@ -102,11 +102,11 @@ export default function Lobby(): JSX.Element {
     getPendingGames();
 
     // Listen for new games started
-    socket.on('game:start', handleGameStart);
+    socket.on(TTZSocketEvent.StartGame, handleGameStart);
 
     // Clean up event listeners
     return () => {
-      socket.off('game:start', handleGameStart);
+      socket.off(TTZSocketEvent.StartGame, handleGameStart);
     };
   }, [handleGameStart, socket]);
 

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import MainLayout from 'layouts/MainLayout';
 import { Circle, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { useUser } from 'contexts/UserContext';
+import { TTZSocketEvent, useUser } from 'contexts/UserContext';
 import Button from 'components/Button';
 import {
   BaseStateChannel,
@@ -42,7 +42,11 @@ export default function Game(): JSX.Element {
   const [triggeringTimeout, setTriggeringTimeout] = useState(false);
   // const [showSignatureModal, setShowSignatureModal] = useState(false);
 
-  const checkWinningPlacement = () => {
+  /**
+   * Checks if current board has a winnning placement
+   * @returns {boolean} whether or not there are 3 pieces in a column, row, or diagonal
+   */
+  const checkWinningPlacement = (): boolean => {
     return WINNING_PLACEMENTS.some((placement: number[]) => {
       let total = 0;
       for (const pos of placement) {
@@ -52,6 +56,10 @@ export default function Game(): JSX.Element {
     });
   };
 
+  /**
+   * Constructs Tic Tac Toe board from turn history
+   */
+  // @TODO: May need to change to account for fetching game state from oncchain
   const constructBoard = () => {
     const board = [0, 0, 0, 0, 0, 0, 0, 0, 0];
     activeGame.turns.forEach((turn: any, index: number) => {
@@ -109,7 +117,7 @@ export default function Game(): JSX.Element {
     const signature = move.sign(wallet);
 
     socket.emit(
-      'game:signOpponentTurn',
+      TTZSocketEvent.SignOpponentTurn,
       {
         id: activeGame._id,
         signature: signature.toString(),
@@ -252,7 +260,7 @@ export default function Game(): JSX.Element {
       });
       await answerTimeout(activeGame.gameId, wallet, contract, row, col);
       socket.emit(
-        'game:timeoutAnswered',
+        TTZSocketEvent.AnswerTimeout,
         {
           id: activeGame._id,
           move: {
@@ -293,7 +301,7 @@ export default function Game(): JSX.Element {
     );
 
     socket.emit(
-      'game:openChannel',
+      TTZSocketEvent.OpenChannel,
       {
         id: activeGame._id,
         openChannelResult: openChannelResult.toJSON(),
@@ -395,7 +403,7 @@ export default function Game(): JSX.Element {
     const move = activeChannel.buildMove(row, col);
 
     socket.emit(
-      'game:turn',
+      TTZSocketEvent.Turn,
       {
         id: activeGame._id,
         move: {
@@ -422,7 +430,7 @@ export default function Game(): JSX.Element {
     setSubmittingGame(true);
     try {
       await activeChannel.finalize();
-      socket.emit('game:gameSubmitted', undefined, (res: any) => {
+      socket.emit(TTZSocketEvent.SubmitGame, undefined, (res: any) => {
         if (res.status === 'success') {
           setActiveGame((prev: any) => ({
             ...prev,
@@ -445,7 +453,7 @@ export default function Game(): JSX.Element {
     const turnResult = await activeChannel.turn(move, turn.opponentSignature);
 
     socket.emit(
-      'game:finalizeTurn',
+      TTZSocketEvent.FinalizeTurn,
       {
         id: activeGame._id,
         turnResult: turnResult.toJSON(),
@@ -508,7 +516,7 @@ export default function Game(): JSX.Element {
     }
     setTriggeringTimeout(false);
     // Put websocket functionality here
-    socket.emit('game:timeoutTriggered', payload, async (res: any) => {
+    socket.emit(TTZSocketEvent.TriggerTimeout, payload, async (res: any) => {
       if (res.status === 'success') {
         const timeout = await getTimeout(activeGame.gameId, wallet, contract);
         if (res.game) {
