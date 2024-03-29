@@ -13,26 +13,19 @@ import { useSocket } from 'contexts/SocketContext';
 import { AztecAddress } from '@aztec/circuits.js';
 import {
   answerTimeout,
-  deserializeGame,
+  cloneGame,
   getTimeout,
   storeGame,
   triggerManualTimeout,
 } from 'utils';
 import { ADDRESS_ZERO, WINNING_PLACEMENTS } from 'utils/constants';
-import { Game, SocketCallbackResponse } from 'utils/types';
-import { cloneDeep } from 'lodash';
+import { Game, SocketCallbackResponse, Turn } from 'utils/types';
+import { SchnorrSignature } from '@aztec/circuits.js/barretenberg';
 // import DuplicationFraudModal from './components/DuplicationFraudModal';
 
 export default function GameView(): JSX.Element {
   const socket = useSocket();
-  const {
-    wallet,
-    activeGame,
-    setActiveGame,
-    setLatestPostedTurn,
-    signingIn,
-    contract,
-  } = useUser();
+  const { wallet, activeGame, setActiveGame, signingIn, contract } = useUser();
   const navigate = useNavigate();
   const [answeringTimeout, setAnsweringTimeout] = useState(false);
   const [board, setBoard] = useState<number[]>([]);
@@ -115,18 +108,22 @@ export default function GameView(): JSX.Element {
       BigInt(turn.gameId)
     );
 
-    const signature = move.sign(wallet);
+    const signature = move.sign(wallet).toString();
 
     socket.emit(
       TTZSocketEvent.SignOpponentTurn,
       {
-        // id: activeGame._id,
-        signature: signature.toString(),
-        turnIndex: activeGame.turnIndex,
+        signature: signature,
       },
-      (res: any) => {
+      (res: SocketCallbackResponse) => {
         if (res.status === 'success') {
-          setActiveGame(deserializeGame(res.game));
+          setActiveGame((prev: Game) => {
+            const clone = cloneGame(prev);
+            clone.turns[clone.turnIndex].opponentSignature = signature;
+            // Update locally stored game
+            storeGame(clone, wallet.getAddress());
+            return clone;
+          });
         }
       }
     );
@@ -257,28 +254,38 @@ export default function GameView(): JSX.Element {
         return prev;
       });
       await answerTimeout(activeGame.id, wallet, contract, row, col);
+      const turn: Turn = {
+        sender: wallet?.getAddress().toString(),
+        row: row,
+        col: col,
+        turnIndex: activeGame.turnIndex,
+        gameId: activeGame.id,
+      };
       socket.emit(
         TTZSocketEvent.AnswerTimeout,
         {
-          // id: activeGame._id,
-          move: {
-            sender: wallet?.getAddress().toString(),
-            row: row,
-            col: col,
-            turnIndex: activeGame.turnIndex,
-            gameId: activeGame.id,
-          },
+          turn,
         },
-        async (res: any) => {
+        async (res: SocketCallbackResponse) => {
           if (res.status === 'success') {
-            const deserialized = deserializeGame(res.game);
-            deserialized.timout = await getTimeout(
-              res.game.gameId,
-              wallet,
-              contract
-            );
-            setLatestPostedTurn(deserialized.turnIndex);
-            setActiveGame(deserialized);
+            setActiveGame((prev: Game) => {
+              const clone = cloneGame(prev);
+              const lastPostedTurn = clone.lastPostedTurn + 1;
+              // Channel is continued
+              clone.channel = new ContinuedStateChannel(
+                wallet,
+                contract,
+                BigInt(clone.id),
+                lastPostedTurn
+              );
+              clone.lastPostedTurn += lastPostedTurn;
+              clone.timeout = 0;
+              clone.turns.push(turn);
+              clone.turnIndex += 1;
+              // Update locally stored game
+              storeGame(clone, wallet.getAddress());
+              return clone;
+            });
           }
         }
       );
@@ -290,9 +297,10 @@ export default function GameView(): JSX.Element {
   };
 
   const commence = async () => {
-    const channel = activeGame.channel;
+    const clone = cloneGame(activeGame);
+    const channel = clone.channel;
     if (!(channel instanceof BaseStateChannel) || !wallet || !socket) return;
-    const { challengerOpenSignature } = activeGame;
+    const { challengerOpenSignature } = clone;
     const openChannelResult = await channel.openChannel(
       challengerOpenSignature!
     );
@@ -304,15 +312,10 @@ export default function GameView(): JSX.Element {
       },
       (res: SocketCallbackResponse) => {
         if (res.status === 'success') {
-          setActiveGame((prev: Game) => {
-            const clone = cloneDeep(prev);
-            (clone.channel as BaseStateChannel).insertOpenChannel(
-              openChannelResult
-            );
-            // Update locally stored game
-            storeGame(clone, wallet.getAddress());
-            return clone;
-          });
+          setActiveGame(clone);
+
+          // Update locally stored game
+          storeGame(clone, wallet.getAddress());
         }
       }
     );
@@ -370,10 +373,6 @@ export default function GameView(): JSX.Element {
       }
     }
 
-    // else if(endCondition >= 0) {
-    //   if(endCondition === )
-    // }
-
     // If opponent's move requires signature
     else if (currentTurn && !currentTurn.opponentSignature) {
       if (isTurn) {
@@ -401,23 +400,31 @@ export default function GameView(): JSX.Element {
 
   const placePiece = async (row: number, col: number) => {
     const channel = activeGame.channel;
-    if (!activeGame || !channel || !wallet || !socket) return;
+    if (!channel || !wallet || !socket) return;
     const move = channel.buildMove(row, col);
-
+    const signature = move.sign(wallet);
+    const turn: Turn = {
+      sender: move.sender.toString(),
+      senderSignature: signature.toString(),
+      row: move.row,
+      col: move.col,
+      turnIndex: move.turnIndex,
+      gameId: activeGame.id,
+    };
     socket.emit(
       TTZSocketEvent.Turn,
       {
-        id: activeGame.id,
-        move: {
-          sender: move.sender.toString(),
-          row: move.row,
-          col: move.col,
-          turnIndex: move.turnIndex,
-          gameId: activeGame.id,
-        },
+        turn,
       },
       (res: SocketCallbackResponse) => {
         if (res.status === 'success') {
+          setActiveGame((prev: Game) => {
+            const clone = cloneGame(prev);
+            clone.turns.push(turn);
+            // Update locally stored game
+            storeGame(clone, wallet.getAddress());
+            return clone;
+          });
           setShowPiece({ row: -1, col: -1 });
         }
       }
@@ -425,51 +432,58 @@ export default function GameView(): JSX.Element {
   };
 
   const submitGame = async () => {
-    const channel = activeGame.channel;
+    const clone = cloneGame(activeGame);
+    const channel = clone.channel;
     if (!channel || !socket) return;
     setSubmittingGame(true);
     try {
       await channel.finalize();
-      socket.emit(TTZSocketEvent.SubmitGame, undefined, (res: any) => {
-        if (res.status === 'success') {
-          setActiveGame((prev: any) => ({
-            ...prev,
-            over: true,
-            timeout: 0n,
-          }));
-          setSubmittingGame(false);
+      socket.emit(
+        TTZSocketEvent.SubmitGame,
+        undefined,
+        (res: SocketCallbackResponse) => {
+          if (res.status === 'success') {
+            clone.over = true;
+            setActiveGame(clone);
+          }
         }
-      });
+      );
     } catch (err) {
       setSubmittingGame(false);
     }
   };
 
   const submitTurn = async () => {
-    const channel = activeGame.channel;
-    if (!channel || !socket) return;
-    const turn = activeGame.turns[activeGame.turnIndex];
+    const clone = cloneGame(activeGame);
+    const channel = clone.channel;
+    if (!channel || !socket || !wallet) return;
+    const turn = clone.turns[activeGame.turnIndex];
 
     const move = channel.buildMove(turn.row, turn.col);
-    const turnResult = await channel.turn(move, turn.opponentSignature);
+    const turnResult = await channel.turn(
+      move,
+      SchnorrSignature.fromString(turn.opponentSignature!)
+    );
 
     socket.emit(
       TTZSocketEvent.FinalizeTurn,
       {
-        id: activeGame.id,
         turnResult: turnResult.toJSON(),
       },
       (res: any) => {
         if (res.status === 'success') {
-          const deserialized = deserializeGame(res.game);
-          setActiveGame(deserialized);
-          setShowPiece({ row: -1, col: -1 });
+          clone.turnIndex += 1;
+          setActiveGame(clone);
+
+          // Update locally stored game
+          storeGame(clone, wallet.getAddress());
         }
       }
     );
   };
 
   const triggerTimeout = async () => {
+    const clone = cloneGame(activeGame);
     const channel = activeGame.channel;
     if (!channel || !contract || !socket || !wallet) return;
     setTriggeringTimeout(true);
@@ -477,11 +491,11 @@ export default function GameView(): JSX.Element {
       ? activeGame.turnIndex % 2 === 0
       : activeGame.turnIndex % 2 === 1;
 
-    let payload = { id: '', turnResult: {} };
+    let payload: { turnResult: object | undefined } = { turnResult: undefined };
 
     if (!isTurn && channel.turnResults.length) {
       // Recompute prior turn result with timeout;
-      const prevTurn = activeGame.turns[activeGame.turnIndex - 1];
+      const prevTurn = clone.turns[clone.turnIndex - 1];
       const move = new Move(
         AztecAddress.fromString(prevTurn.sender),
         prevTurn.row,
@@ -491,7 +505,11 @@ export default function GameView(): JSX.Element {
       );
       // Remove last turn and recompute turn with timeout
       channel.turnResults.pop();
-      await channel.turn(move, prevTurn.opponentSignature, true);
+      await channel.turn(
+        move,
+        SchnorrSignature.fromString(prevTurn.opponentSignature!),
+        true
+      );
       await channel.finalize();
     }
     // Manual timeout trigger in case of no turn results
@@ -512,26 +530,27 @@ export default function GameView(): JSX.Element {
       const turnResult = await channel.turn(move, undefined, true);
       await channel.finalize();
 
-      payload.id = activeGame.id;
       payload.turnResult = turnResult.toJSON();
     }
     setTriggeringTimeout(false);
     // Put websocket functionality here
-    socket.emit(TTZSocketEvent.TriggerTimeout, payload, async (res: any) => {
-      if (res.status === 'success') {
-        const timeout = await getTimeout(activeGame.id, wallet, contract);
-        if (res.game) {
-          const deserialized = deserializeGame(res.game);
-          deserialized.timeout = timeout;
-          setActiveGame(deserialized);
-        } else {
-          setActiveGame((prev: any) => ({
-            ...prev,
-            timeout,
-          }));
+    socket.emit(
+      TTZSocketEvent.TriggerTimeout,
+      payload,
+      async (res: SocketCallbackResponse) => {
+        if (res.status === 'success') {
+          clone.timeout = Number(
+            await getTimeout(activeGame.id, wallet, contract)
+          );
+          if (payload.turnResult) {
+            clone.turnIndex += 1;
+          }
+          setActiveGame(clone);
+          // Update locally stored game
+          storeGame(clone, wallet.getAddress());
         }
       }
-    });
+    );
   };
 
   useEffect(() => {
@@ -541,6 +560,19 @@ export default function GameView(): JSX.Element {
     } else {
       constructBoard();
     }
+    // Check if turn needs to be finalized
+    //   const isTurn = isHost
+    //     ? activeGame.turnIndex % 2 === 0
+    //     : activeGame.turnIndex % 2 === 1;
+    //   const currentTurn = activeGame.turns[activeGame.turnIndex];
+    //   if (
+    //     isTurn &&
+    //     currentTurn?.opponentSignature &&
+    //     activeGame.turnIndex !== activeGame.turns.length
+    //   ) {
+    //     submitTurn();
+    //   }
+    // }
   }, [activeGame, signingIn]);
 
   return (

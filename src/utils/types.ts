@@ -1,6 +1,7 @@
 import { AztecAddress } from '@aztec/circuits.js';
 import { StateChannel } from 'contexts/UserContext';
 import { OpenChannelSignature } from '@mach-34/aztec-statechannel-tictactoe/dest/src/channel/base';
+import { Move } from '@mach-34/aztec-statechannel-tictactoe';
 
 export type Game = {
     challenger: AztecAddress;
@@ -11,8 +12,7 @@ export type Game = {
     lastPostedTurn: number;
     over: boolean;
     timeout: number;
-    // @TODO: Remove any
-    turns: any[];
+    turns: Turn[];
     turnIndex: number;
 };
 
@@ -26,18 +26,31 @@ export type SerializedGame = {
     openChannelResult: object | undefined;
     over: boolean;
     timeout: number;
-    // @TODO: Remove any
-    turns: any[];
+    turns: Turn[];
     turnResults: object[];
     turnIndex: number;
 }
 
 export type Turn = {
+    col: number
+    gameId: string
+    opponentSignature?: string
+    row: number
     sender: string
+    senderSignature?: string
+    turnIndex: number
 }
 
 
 // ##### Socket Event Responses #####
+
+export type AnswerTimeoutResponse = {
+    turn: Turn
+}
+
+export type FinalTurnResponse = {
+    turnResult: object
+}
 
 export type JoinGameResponse = {
     address: string
@@ -53,6 +66,19 @@ export type SocketCallbackResponse = {
     status: string
 }
 
+export type SignTurnResponse = {
+    signature: string
+}
+
+
 export type StartGameResponse = {
     address: string
+}
+
+export type TriggerTimeoutResponse = {
+    turnResult?: object;
+}
+
+export type TurnResponse = {
+    turn: Turn
 }

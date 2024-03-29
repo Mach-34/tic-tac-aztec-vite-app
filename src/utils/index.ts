@@ -7,6 +7,7 @@ import { OpenChannelSignature } from '@mach-34/aztec-statechannel-tictactoe/dest
 import { AccountWalletWithPrivateKey, Wallet } from "@aztec/aztec.js";
 import { Game, SerializedGame } from "./types";
 import { ADDRESS_ZERO } from "./constants";
+import { StateChannel } from "contexts/UserContext";
 
 export const answerTimeout = async (gameId: string, wallet: Wallet, address: AztecAddress, row: number, col: number) => {
     if (!wallet) return;
@@ -20,21 +21,33 @@ export const answerTimeout = async (gameId: string, wallet: Wallet, address: Azt
         .wait();
 }
 
-// TODO: Get rid of any
-export const deserializeGame = (game: any) => {
-    const challengerOpenSignature = game.challengerOpenSignature;
-    const { open, orchestrator, turn } = game.executionResults;
-    game.challengerOpenSignature = challengerOpenSignature ? {
-        from: AztecAddress.fromString(challengerOpenSignature.from),
-        sig: challengerOpenSignature.sig.map((val: string) => Fr.fromString(val))
-    } : undefined;
-    game.executionResults = {
-        open: open ? AppExecutionResult.fromJSON(open) : open,
-        orchestrator: orchestrator ? AppExecutionResult.fromJSON(orchestrator) : orchestrator,
-        turn: turn.map((turn: any) => AppExecutionResult.fromJSON(turn))
+export const cloneGame = (game: Game) => {
+    const clonedGame: Game = {
+        challenger: AztecAddress.fromString(game.challenger.toString()),
+        challengerOpenSignature: game.challengerOpenSignature,
+        channel: game.channel ? cloneStateChannel(game.channel) : undefined,
+        host: AztecAddress.fromString(game.host.toString()),
+        id: game.id,
+        lastPostedTurn: game.lastPostedTurn,
+        over: game.over,
+        timeout: game.timeout,
+        turns: [...game.turns],
+        turnIndex: game.turnIndex,
     };
-    game.turns = game.turns.map((turn: any) => turn.opponentSignature ? { ...turn, opponentSignature: SchnorrSignature.fromString(turn.opponentSignature) } : turn)
-    return game;
+    return clonedGame
+}
+
+export const cloneStateChannel = (channel: StateChannel): StateChannel => {
+    if (channel instanceof BaseStateChannel) {
+        const copy = new BaseStateChannel(channel.account, channel.contractAddress, channel.gameIndex);
+        copy.openChannelResult = channel.openChannelResult;
+        copy.turnResults = channel.turnResults;
+        return copy;
+    } else {
+        const copy = new ContinuedStateChannel(channel.account, channel.contractAddress, channel.gameIndex, channel.startIndex);
+        copy.turnResults = channel.turnResults;
+        return copy;
+    }
 }
 
 export const initNewGame = (): Game => {
@@ -92,7 +105,7 @@ export const getTimeout = async (gameId: string, wallet: Wallet, address: AztecA
     return timeout ? timeout + 600n : 0;
 };
 
-export const deserializeGameTodo = (
+export const deserializeGame = (
     serialized: SerializedGame,
     wallet: AccountWalletWithPrivateKey,
     contractAddress: AztecAddress
