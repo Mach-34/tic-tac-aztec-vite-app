@@ -32,16 +32,27 @@ export type SerializedGame = {
     turnIndex: number;
 }
 
+export type Turn = {
+    sender: string
+}
+
+
+// ##### Socket Event Responses #####
+
 export type JoinGameResponse = {
     address: string
     id: string
     signature: string[]
 }
 
-export type StartGameResponse = {
-    address: string
+export type OpenChannelResponse = {
+    openChannelResult: object;
 }
 
-export type StartGameCallbackResponse = {
+export type SocketCallbackResponse = {
     status: string
+}
+
+export type StartGameResponse = {
+    address: string
 }

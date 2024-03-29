@@ -108,7 +108,7 @@ export const deserializeGameTodo = (
         channel.turnResults = serialized.turnResults.slice(diff).map(res => AppExecutionResult.fromJSON(res));
     } else if (serialized.id) {
         channel = new BaseStateChannel(wallet, contractAddress, BigInt(serialized.id));
-        channel.openChannelResult = AppExecutionResult.fromJSON(serialized.openChannelResult);
+        channel.openChannelResult = serialized.openChannelResult ? AppExecutionResult.fromJSON(serialized.openChannelResult) : undefined;
         channel.turnResults = serialized.turnResults.map(res => AppExecutionResult.fromJSON(res));
     }
     return {

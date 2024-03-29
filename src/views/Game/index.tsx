@@ -15,17 +15,19 @@ import {
   answerTimeout,
   deserializeGame,
   getTimeout,
+  storeGame,
   triggerManualTimeout,
 } from 'utils';
 import { ADDRESS_ZERO, WINNING_PLACEMENTS } from 'utils/constants';
+import { Game, SocketCallbackResponse } from 'utils/types';
+import { cloneDeep } from 'lodash';
 // import DuplicationFraudModal from './components/DuplicationFraudModal';
 
-export default function Game(): JSX.Element {
+export default function GameView(): JSX.Element {
   const socket = useSocket();
   const {
     wallet,
     activeGame,
-    latestPostedTurn,
     setActiveGame,
     setLatestPostedTurn,
     signingIn,
@@ -118,7 +120,7 @@ export default function Game(): JSX.Element {
     socket.emit(
       TTZSocketEvent.SignOpponentTurn,
       {
-        id: activeGame._id,
+        // id: activeGame._id,
         signature: signature.toString(),
         turnIndex: activeGame.turnIndex,
       },
@@ -254,17 +256,17 @@ export default function Game(): JSX.Element {
         prev[coord] = activeGame.turnIndex % 2 === 0 ? 1 : 4;
         return prev;
       });
-      await answerTimeout(activeGame.gameId, wallet, contract, row, col);
+      await answerTimeout(activeGame.id, wallet, contract, row, col);
       socket.emit(
         TTZSocketEvent.AnswerTimeout,
         {
-          id: activeGame._id,
+          // id: activeGame._id,
           move: {
-            sender: wallet?.getCompleteAddress().address.toString(),
+            sender: wallet?.getAddress().toString(),
             row: row,
             col: col,
             turnIndex: activeGame.turnIndex,
-            gameId: activeGame.gameId,
+            gameId: activeGame.id,
           },
         },
         async (res: any) => {
@@ -292,19 +294,25 @@ export default function Game(): JSX.Element {
     if (!(channel instanceof BaseStateChannel) || !wallet || !socket) return;
     const { challengerOpenSignature } = activeGame;
     const openChannelResult = await channel.openChannel(
-      challengerOpenSignature
+      challengerOpenSignature!
     );
 
     socket.emit(
       TTZSocketEvent.OpenChannel,
       {
-        id: activeGame._id,
         openChannelResult: openChannelResult.toJSON(),
       },
-      (res: any) => {
+      (res: SocketCallbackResponse) => {
         if (res.status === 'success') {
-          const deserialized = deserializeGame(res.game);
-          setActiveGame(deserialized);
+          setActiveGame((prev: Game) => {
+            const clone = cloneDeep(prev);
+            (clone.channel as BaseStateChannel).insertOpenChannel(
+              openChannelResult
+            );
+            // Update locally stored game
+            storeGame(clone, wallet.getAddress());
+            return clone;
+          });
         }
       }
     );
@@ -391,27 +399,25 @@ export default function Game(): JSX.Element {
     }
   }, [activeGame, answeringTimeout, gameOver, isHost]);
 
-  const handlePlacement = async (row: number, col: number) => {
-    if (!activeGame || !wallet || !socket) return;
+  const placePiece = async (row: number, col: number) => {
     const channel = activeGame.channel;
+    if (!activeGame || !channel || !wallet || !socket) return;
     const move = channel.buildMove(row, col);
 
     socket.emit(
       TTZSocketEvent.Turn,
       {
-        id: activeGame._id,
+        id: activeGame.id,
         move: {
           sender: move.sender.toString(),
           row: move.row,
           col: move.col,
           turnIndex: move.turnIndex,
-          gameId: activeGame.gameId,
+          gameId: activeGame.id,
         },
       },
-      (res: any) => {
+      (res: SocketCallbackResponse) => {
         if (res.status === 'success') {
-          const deserialized = deserializeGame(res.game);
-          setActiveGame(deserialized);
           setShowPiece({ row: -1, col: -1 });
         }
       }
@@ -419,9 +425,9 @@ export default function Game(): JSX.Element {
   };
 
   const submitGame = async () => {
-    if (!socket) return;
-    setSubmittingGame(true);
     const channel = activeGame.channel;
+    if (!channel || !socket) return;
+    setSubmittingGame(true);
     try {
       await channel.finalize();
       socket.emit(TTZSocketEvent.SubmitGame, undefined, (res: any) => {
@@ -440,8 +446,8 @@ export default function Game(): JSX.Element {
   };
 
   const submitTurn = async () => {
-    if (!socket) return;
     const channel = activeGame.channel;
+    if (!channel || !socket) return;
     const turn = activeGame.turns[activeGame.turnIndex];
 
     const move = channel.buildMove(turn.row, turn.col);
@@ -450,7 +456,7 @@ export default function Game(): JSX.Element {
     socket.emit(
       TTZSocketEvent.FinalizeTurn,
       {
-        id: activeGame._id,
+        id: activeGame.id,
         turnResult: turnResult.toJSON(),
       },
       (res: any) => {
@@ -464,14 +470,14 @@ export default function Game(): JSX.Element {
   };
 
   const triggerTimeout = async () => {
-    if (!activeGame || !contract || !socket || !wallet) return;
-    setTriggeringTimeout(true);
     const channel = activeGame.channel;
+    if (!channel || !contract || !socket || !wallet) return;
+    setTriggeringTimeout(true);
     const isTurn = isHost
       ? activeGame.turnIndex % 2 === 0
       : activeGame.turnIndex % 2 === 1;
 
-    let payload = { id: undefined, turnResult: {} };
+    let payload = { id: '', turnResult: {} };
 
     if (!isTurn && channel.turnResults.length) {
       // Recompute prior turn result with timeout;
@@ -490,7 +496,7 @@ export default function Game(): JSX.Element {
     }
     // Manual timeout trigger in case of no turn results
     else if (!isTurn) {
-      await triggerManualTimeout(activeGame.gameId, wallet, contract);
+      await triggerManualTimeout(activeGame.id, wallet, contract);
     } else {
       // Add turn to active channel before finalizing
       const turn = activeGame.turns[activeGame.turnIndex];
@@ -506,14 +512,14 @@ export default function Game(): JSX.Element {
       const turnResult = await channel.turn(move, undefined, true);
       await channel.finalize();
 
-      payload.id = activeGame._id;
+      payload.id = activeGame.id;
       payload.turnResult = turnResult.toJSON();
     }
     setTriggeringTimeout(false);
     // Put websocket functionality here
     socket.emit(TTZSocketEvent.TriggerTimeout, payload, async (res: any) => {
       if (res.status === 'success') {
-        const timeout = await getTimeout(activeGame.gameId, wallet, contract);
+        const timeout = await getTimeout(activeGame.id, wallet, contract);
         if (res.game) {
           const deserialized = deserializeGame(res.game);
           deserialized.timeout = timeout;
@@ -567,7 +573,7 @@ export default function Game(): JSX.Element {
                         canMove &&
                         (activeGame.timeout > 0n
                           ? answerActiveTimeout(rowIndex, colIndex)
-                          : handlePlacement(rowIndex, colIndex))
+                          : placePiece(rowIndex, colIndex))
                       }
                       onMouseEnter={() =>
                         !occupied &&
@@ -584,8 +590,8 @@ export default function Game(): JSX.Element {
                         ))}
                       {isHovering &&
                         !occupied &&
-                        (activeGame.host ===
-                        wallet?.getCompleteAddress().address.toString() ? (
+                        (activeGame.host.toString() ===
+                        wallet?.getAddress().toString() ? (
                           <X className='opacity-60' color='#2D2047' size={60} />
                         ) : (
                           <Circle

@@ -27,10 +27,17 @@ import {
   gameKey,
   getAztecGameState,
   getTimeout,
+  initNewGame,
   storeGame,
 } from 'utils';
-import { Game, JoinGameResponse, SerializedGame } from 'utils/types';
-import _ from 'lodash';
+import {
+  Game,
+  JoinGameResponse,
+  OpenChannelResponse,
+  SerializedGame,
+} from 'utils/types';
+import { cloneDeep } from 'lodash';
+import { AppExecutionResult } from '@aztec/circuit-types';
 const { REACT_APP_API_URL: API_URL } = process.env;
 
 export type StateChannel = BaseStateChannel | ContinuedStateChannel;
@@ -49,10 +56,10 @@ export enum TTZSocketEvent {
 }
 
 type UserContextType = {
-  activeGame: any;
+  activeGame: Game;
   contract: AztecAddress | null;
   latestPostedTurn: number;
-  setActiveGame: Dispatch<SetStateAction<any>>;
+  setActiveGame: Dispatch<SetStateAction<Game>>;
   setLatestPostedTurn: Dispatch<SetStateAction<number>>;
   signIn: (key: string) => Promise<void>;
   signingIn: boolean;
@@ -61,7 +68,7 @@ type UserContextType = {
 };
 
 const UserContext = createContext<UserContextType>({
-  activeGame: null,
+  activeGame: initNewGame(),
   contract: null,
   latestPostedTurn: -1,
   setActiveGame: () => {},
@@ -158,7 +165,7 @@ export const UserProvider: React.FC<{ children: JSX.Element }> = ({
 
     const handleGameJoin = (data: JoinGameResponse) => {
       setActiveGame((prev: Game) => {
-        const clone = _.cloneDeep(prev);
+        const clone = cloneDeep(prev);
         clone.challenger = AztecAddress.fromString(data.address);
         clone.id = data.id;
         clone.challengerOpenSignature = deserializeOpenChannel(data.signature);
@@ -216,9 +223,15 @@ export const UserProvider: React.FC<{ children: JSX.Element }> = ({
       }
     };
 
-    const handleSignOpen = (data: any) => {
-      const deserialized = deserializeGame(data);
-      setActiveGame(deserialized);
+    const handleSignOpen = ({ openChannelResult }: OpenChannelResponse) => {
+      setActiveGame((prev: Game) => {
+        const clone = cloneDeep(prev);
+        const deserialized = AppExecutionResult.fromJSON(openChannelResult);
+        (clone.channel as BaseStateChannel).openChannelResult = deserialized;
+        // Update locally stored game
+        storeGame(clone, wallet.getAddress());
+        return clone;
+      });
     };
 
     const handleSignOpponentTurn = (data: any) => {

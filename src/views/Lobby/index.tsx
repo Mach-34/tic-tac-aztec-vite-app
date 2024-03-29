@@ -9,14 +9,12 @@ import { AztecAddress } from '@aztec/aztec.js';
 import { BaseStateChannel } from '@mach-34/aztec-statechannel-tictactoe';
 import {
   formatAztecAddress,
-  gameKey,
   genAztecId,
   initNewGame,
-  serializeGame,
   serializeOpenChannel,
   storeGame,
 } from 'utils';
-import { StartGameCallbackResponse, StartGameResponse } from 'utils/types';
+import { SocketCallbackResponse, StartGameResponse } from 'utils/types';
 
 const { REACT_APP_API_URL: API_URL } = process.env;
 
@@ -64,7 +62,7 @@ export default function Lobby(): JSX.Element {
         id,
         signature: serializeOpenChannel(guestChannelOpenSignature),
       },
-      (res: any) => {
+      (res: SocketCallbackResponse) => {
         if (res.status === 'success') {
           setActiveGame(game);
           // Store game state in local storage
@@ -92,7 +90,7 @@ export default function Lobby(): JSX.Element {
     socket.emit(
       TTZSocketEvent.StartGame,
       { address: address.toString() },
-      (res: StartGameCallbackResponse) => {
+      (res: SocketCallbackResponse) => {
         if (res.status === 'success') {
           // Update global game state
           setActiveGame(game);
