@@ -1,36 +1,41 @@
 import Button from 'components/Button';
 import MainLayout from '../../layouts/MainLayout';
 import { Play } from 'lucide-react';
-import { useUser } from 'contexts/UserContext';
+import { TTZSocketEvent, useUser } from 'contexts/UserContext';
 import { useCallback, useEffect, useState } from 'react';
 import { useSocket } from 'contexts/SocketContext';
 import { useNavigate } from 'react-router-dom';
 import { AztecAddress } from '@aztec/aztec.js';
 import { BaseStateChannel } from '@mach-34/aztec-statechannel-tictactoe';
-import { deserializeGame, genAztecId } from 'utils';
+import {
+  formatAztecAddress,
+  genAztecId,
+  initNewGame,
+  serializeOpenChannel,
+  storeGame,
+} from 'utils';
+import { SocketCallbackResponse, StartGameResponse } from 'utils/types';
 
 const { REACT_APP_API_URL: API_URL } = process.env;
 
 export default function Lobby(): JSX.Element {
-  const { wallet, initializeChannel, setActiveGame, signedIn } = useUser();
+  const { contract, setActiveGame, signedIn, wallet } = useUser();
   const socket = useSocket();
-  // TODO: Remove any
-  const [games, setGames] = useState<any>([]);
+  const [games, setGames] = useState<string[]>([]);
   const navigate = useNavigate();
 
   const handleGameStart = useCallback(
-    async (game: any) => {
-      // TODO: Remove any
-      setGames((prev: any) => [...prev, game]);
+    async (res: StartGameResponse) => {
+      setGames((prev: string[]) => [...prev, res.address]);
     },
     [setGames]
   );
 
-  const joinGame = async (id: string, opponent: string) => {
-    if (!wallet || !socket) return;
+  const joinGame = async (opponent: string) => {
+    if (!contract || !socket || !wallet) return;
 
     // get address
-    const address = wallet.getCompleteAddress().address;
+    const address = wallet.getAddress();
 
     // Sign open channel as guest
     const guestChannelOpenSignature = BaseStateChannel.signOpenChannel(
@@ -39,58 +44,60 @@ export default function Lobby(): JSX.Element {
       true
     );
 
-    const serializedSignature = {
-      from: guestChannelOpenSignature.from.toString(),
-      sig: [
-        guestChannelOpenSignature.sig[0].toString(),
-        guestChannelOpenSignature.sig[1].toString(),
-        guestChannelOpenSignature.sig[2].toString(),
-      ],
-    };
-
     // Generate unique id
-    const gameId = genAztecId(AztecAddress.fromString(opponent), address);
+    const id = genAztecId(AztecAddress.fromString(opponent), address);
+
+    // Initialize game state
+    const game = initNewGame();
+    game.channel = new BaseStateChannel(wallet, contract, BigInt(id));
+    game.challenger = address;
+    game.challengerOpenSignature = guestChannelOpenSignature;
+    game.host = AztecAddress.fromString(opponent);
+    game.id = id;
 
     socket.emit(
-      'game:join',
+      TTZSocketEvent.JoinGame,
       {
         address: address.toString(),
-        gameId,
         id,
-        signature: serializedSignature,
+        signature: serializeOpenChannel(guestChannelOpenSignature),
       },
-      (res: any) => {
+      (res: SocketCallbackResponse) => {
         if (res.status === 'success') {
-          const deserialized = deserializeGame(res.game);
-          setActiveGame(deserialized);
-          initializeChannel(deserialized);
+          setActiveGame(game);
+          // Store game state in local storage
+          storeGame(game, address);
+          setGames((prev) => prev.filter((host) => host === opponent));
           navigate('/game/pending');
         }
       }
     );
   };
 
-  const getPendingGames = async () => {
-    const res = await fetch(`${API_URL}/game/pending`);
+  const getOpenGames = async () => {
+    const res = await fetch(`${API_URL}/game/open`);
     const data = await res.json();
-    setGames(data);
+    setGames(data.map(({ host }: { host: string }) => host));
   };
 
   const startGame = async () => {
     if (!wallet || !socket) return;
+    const address = wallet.getAddress();
+    const game = initNewGame();
+    game.host = address;
+
     // Emit start game event
     socket.emit(
-      'game:start',
-      { address: wallet.getCompleteAddress().address.toString() },
-      (res: any) => {
+      TTZSocketEvent.StartGame,
+      { address: address.toString() },
+      (res: SocketCallbackResponse) => {
         if (res.status === 'success') {
-          const deserialized = deserializeGame(res.game);
-          setActiveGame(deserialized);
-          initializeChannel(deserialized);
-          // TODO: Figure out why this isn't working
+          // Update global game state
+          setActiveGame(game);
+
+          // Store game locally
+          storeGame(game, address);
           navigate('/game/pending');
-        } else {
-          // TODO: Handle error case
         }
       }
     );
@@ -99,14 +106,14 @@ export default function Lobby(): JSX.Element {
   useEffect(() => {
     if (!socket) return;
     // Get pending games from db
-    getPendingGames();
+    getOpenGames();
 
     // Listen for new games started
-    socket.on('game:start', handleGameStart);
+    socket.on(TTZSocketEvent.StartGame, handleGameStart);
 
     // Clean up event listeners
     return () => {
-      socket.off('game:start', handleGameStart);
+      socket.off(TTZSocketEvent.StartGame, handleGameStart);
     };
   }, [handleGameStart, socket]);
 
@@ -116,20 +123,15 @@ export default function Lobby(): JSX.Element {
         <div className='text-center'>
           <div className='mt-10 text-4xl'>Open Games</div>
           <div className='mt-10 w-1/2'>
-            {/* TODO: Remove any */}
             {games
               .filter(
-                (game: any) =>
-                  game.host !== wallet?.getCompleteAddress().address.toString()
+                (host: string) => host !== wallet?.getAddress().toString()
               )
-              .map((game: any, index: number) => (
+              .map((host: string, index: number) => (
                 <div className='flex items-center gap-2 mb-8' key={index}>
-                  {game._id}
+                  {formatAztecAddress(host)}
                   {signedIn && (
-                    <Button
-                      onClick={() => joinGame(game._id, game.host)}
-                      text='Join'
-                    />
+                    <Button onClick={() => joinGame(host)} text='Join' />
                   )}
                 </div>
               ))}

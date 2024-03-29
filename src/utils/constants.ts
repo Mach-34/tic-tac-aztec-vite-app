@@ -1,3 +1,4 @@
+export const ADDRESS_ZERO = '0x0000000000000000000000000000000000000000000000000000000000000000'
 export const PXE_URL = "http://localhost:8080";
 export const SERVER_URL = "http://localhost:8000";
 export const WINNING_PLACEMENTS = [
