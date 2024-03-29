@@ -19,6 +19,7 @@
     "@mach-34/aztec-statechannel-tictactoe": "file:../../aztec-state-channels",
     "@radix-ui/react-dialog": "^1.0.5",
     "esbuild-plugins-node-modules-polyfill": "^1.6.3",
+    "lodash": "^4.17.21",
     "lucide-react": "^0.338.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
@@ -29,6 +30,7 @@
   },
   "devDependencies": {
     "@esbuild-plugins/node-globals-polyfill": "^0.2.3",
+    "@types/lodash": "^4.17.0",
     "@types/react": "^18.2.56",
     "@types/react-dom": "^18.2.19",
     "@typescript-eslint/eslint-plugin": "^7.0.2",

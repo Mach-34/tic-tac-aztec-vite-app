@@ -17,16 +17,14 @@ import {
   getTimeout,
   triggerManualTimeout,
 } from 'utils';
-import { WINNING_PLACEMENTS } from 'utils/constants';
+import { ADDRESS_ZERO, WINNING_PLACEMENTS } from 'utils/constants';
 // import DuplicationFraudModal from './components/DuplicationFraudModal';
 
 export default function Game(): JSX.Element {
   const socket = useSocket();
   const {
     wallet,
-    activeChannel,
     activeGame,
-    initializeChannel,
     latestPostedTurn,
     setActiveGame,
     setLatestPostedTurn,
@@ -70,23 +68,24 @@ export default function Game(): JSX.Element {
   };
 
   const canMove = useMemo(() => {
+    if (!activeGame) return;
+    const channel = activeGame.channel;
     const channelOpened =
-      activeChannel instanceof ContinuedStateChannel ||
-      activeChannel?.openChannelResult;
-    if (answeringTimeout || !activeGame || !channelOpened) return false;
+      channel instanceof ContinuedStateChannel || channel?.openChannelResult;
+    if (answeringTimeout || !channelOpened) return false;
     const isHost =
-      wallet?.getCompleteAddress().address.toString() === activeGame.host;
+      wallet?.getAddress().toString() === activeGame.host.toString();
 
     const isTurn = isHost
       ? activeGame.turnIndex % 2 === 0
       : activeGame.turnIndex % 2 === 1;
 
     return isTurn && activeGame.turns.length === activeGame.turnIndex;
-  }, [activeChannel, activeGame, answeringTimeout, wallet]);
+  }, [activeGame, answeringTimeout, wallet]);
 
   const isHost = useMemo(() => {
     if (!activeGame) return false;
-    return wallet?.getCompleteAddress().address.toString() === activeGame.host;
+    return wallet?.getAddress().toString() === activeGame.host.toString();
   }, [activeGame]);
 
   const gameOver = useMemo(() => {
@@ -103,7 +102,7 @@ export default function Game(): JSX.Element {
   }, [activeGame, board, isHost]);
 
   const signOpponentTurn = async () => {
-    if (!activeChannel || !wallet || !socket) return;
+    if (!wallet || !socket) return;
     const turn = activeGame.turns[activeGame.turnIndex];
 
     const move = new Move(
@@ -132,14 +131,14 @@ export default function Game(): JSX.Element {
   };
 
   const actions = useMemo(() => {
+    if (!activeGame) return <></>;
     const arr: JSX.Element[] = [];
-    if (!activeChannel || !activeGame) return <></>;
+    const channel = activeGame.channel;
 
     const currentTurn = activeGame.turns[activeGame.turnIndex];
 
     const channelOpen =
-      activeChannel instanceof ContinuedStateChannel ||
-      !!activeChannel.openChannelResult;
+      channel instanceof ContinuedStateChannel || !!channel?.openChannelResult;
 
     const isTurn = isHost
       ? activeGame.turnIndex % 2 === 0
@@ -163,7 +162,11 @@ export default function Game(): JSX.Element {
           text={submittingGame ? 'Submitting game...' : 'Submit game'}
         />
       );
-    } else if (isHost && activeGame.challenger && !channelOpen) {
+    } else if (
+      isHost &&
+      activeGame.challenger.toString() !== ADDRESS_ZERO &&
+      !channelOpen
+    ) {
       arr.push(
         <Button
           className='my-2'
@@ -239,14 +242,7 @@ export default function Game(): JSX.Element {
     }
 
     return arr;
-  }, [
-    activeChannel,
-    activeGame,
-    gameOver,
-    isHost,
-    submittingGame,
-    triggeringTimeout,
-  ]);
+  }, [activeGame, gameOver, isHost, submittingGame, triggeringTimeout]);
 
   const answerActiveTimeout = async (row: number, col: number) => {
     if (!contract || !socket || !wallet) return;
@@ -281,7 +277,6 @@ export default function Game(): JSX.Element {
             );
             setLatestPostedTurn(deserialized.turnIndex);
             setActiveGame(deserialized);
-            initializeChannel(deserialized, deserialized.turnIndex);
           }
         }
       );
@@ -293,10 +288,10 @@ export default function Game(): JSX.Element {
   };
 
   const commence = async () => {
-    if (!(activeChannel instanceof BaseStateChannel) || !wallet || !socket)
-      return;
+    const channel = activeGame.channel;
+    if (!(channel instanceof BaseStateChannel) || !wallet || !socket) return;
     const { challengerOpenSignature } = activeGame;
-    const openChannelResult = await activeChannel.openChannel(
+    const openChannelResult = await channel.openChannel(
       challengerOpenSignature
     );
 
@@ -310,18 +305,17 @@ export default function Game(): JSX.Element {
         if (res.status === 'success') {
           const deserialized = deserializeGame(res.game);
           setActiveGame(deserialized);
-          initializeChannel(deserialized, latestPostedTurn);
         }
       }
     );
   };
 
   const statusMessage = useMemo(() => {
-    if (!activeGame || !activeChannel) return '';
+    if (!activeGame) return '';
 
+    const channel = activeGame.channel;
     const channelOpen =
-      activeChannel instanceof ContinuedStateChannel ||
-      !!activeChannel.openChannelResult;
+      channel instanceof ContinuedStateChannel || !!channel?.openChannelResult;
     const currentTurn = activeGame.turns[activeGame.turnIndex];
 
     const isTurn = isHost
@@ -347,7 +341,7 @@ export default function Game(): JSX.Element {
     }
 
     // Text displayed when challenger needs to join game
-    else if (!activeGame.challenger) {
+    else if (activeGame.challenger.toString() === ADDRESS_ZERO) {
       return 'Waiting for opponent to join.';
     }
 
@@ -395,12 +389,12 @@ export default function Game(): JSX.Element {
         return 'Waiting on opponents turn.';
       }
     }
-  }, [activeChannel, activeGame, answeringTimeout, gameOver, isHost]);
+  }, [activeGame, answeringTimeout, gameOver, isHost]);
 
   const handlePlacement = async (row: number, col: number) => {
-    if (!activeChannel || !activeGame || !wallet || !socket) return;
-
-    const move = activeChannel.buildMove(row, col);
+    if (!activeGame || !wallet || !socket) return;
+    const channel = activeGame.channel;
+    const move = channel.buildMove(row, col);
 
     socket.emit(
       TTZSocketEvent.Turn,
@@ -418,7 +412,6 @@ export default function Game(): JSX.Element {
         if (res.status === 'success') {
           const deserialized = deserializeGame(res.game);
           setActiveGame(deserialized);
-          initializeChannel(deserialized, latestPostedTurn);
           setShowPiece({ row: -1, col: -1 });
         }
       }
@@ -426,10 +419,11 @@ export default function Game(): JSX.Element {
   };
 
   const submitGame = async () => {
-    if (!activeChannel || !socket) return;
+    if (!socket) return;
     setSubmittingGame(true);
+    const channel = activeGame.channel;
     try {
-      await activeChannel.finalize();
+      await channel.finalize();
       socket.emit(TTZSocketEvent.SubmitGame, undefined, (res: any) => {
         if (res.status === 'success') {
           setActiveGame((prev: any) => ({
@@ -446,11 +440,12 @@ export default function Game(): JSX.Element {
   };
 
   const submitTurn = async () => {
-    if (!activeChannel || !socket) return;
+    if (!socket) return;
+    const channel = activeGame.channel;
     const turn = activeGame.turns[activeGame.turnIndex];
 
-    const move = activeChannel.buildMove(turn.row, turn.col);
-    const turnResult = await activeChannel.turn(move, turn.opponentSignature);
+    const move = channel.buildMove(turn.row, turn.col);
+    const turnResult = await channel.turn(move, turn.opponentSignature);
 
     socket.emit(
       TTZSocketEvent.FinalizeTurn,
@@ -462,7 +457,6 @@ export default function Game(): JSX.Element {
         if (res.status === 'success') {
           const deserialized = deserializeGame(res.game);
           setActiveGame(deserialized);
-          initializeChannel(deserialized, latestPostedTurn);
           setShowPiece({ row: -1, col: -1 });
         }
       }
@@ -470,15 +464,16 @@ export default function Game(): JSX.Element {
   };
 
   const triggerTimeout = async () => {
-    if (!activeChannel || !contract || !socket || !wallet) return;
+    if (!activeGame || !contract || !socket || !wallet) return;
     setTriggeringTimeout(true);
+    const channel = activeGame.channel;
     const isTurn = isHost
       ? activeGame.turnIndex % 2 === 0
       : activeGame.turnIndex % 2 === 1;
 
     let payload = { id: undefined, turnResult: {} };
 
-    if (!isTurn && activeChannel.turnResults.length) {
+    if (!isTurn && channel.turnResults.length) {
       // Recompute prior turn result with timeout;
       const prevTurn = activeGame.turns[activeGame.turnIndex - 1];
       const move = new Move(
@@ -489,9 +484,9 @@ export default function Game(): JSX.Element {
         BigInt(prevTurn.gameId)
       );
       // Remove last turn and recompute turn with timeout
-      activeChannel.turnResults.pop();
-      await activeChannel.turn(move, prevTurn.opponentSignature, true);
-      await activeChannel.finalize();
+      channel.turnResults.pop();
+      await channel.turn(move, prevTurn.opponentSignature, true);
+      await channel.finalize();
     }
     // Manual timeout trigger in case of no turn results
     else if (!isTurn) {
@@ -508,8 +503,8 @@ export default function Game(): JSX.Element {
         BigInt(turn.gameId)
       );
 
-      const turnResult = await activeChannel.turn(move, undefined, true);
-      await activeChannel.finalize();
+      const turnResult = await channel.turn(move, undefined, true);
+      await channel.finalize();
 
       payload.id = activeGame._id;
       payload.turnResult = turnResult.toJSON();

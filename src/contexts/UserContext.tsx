@@ -20,24 +20,20 @@ import {
   ContinuedStateChannel,
 } from '@mach-34/aztec-statechannel-tictactoe';
 import { PXE_URL } from 'utils/constants';
-import { deserializeGame, getAztecGameState, getTimeout } from 'utils';
-import { SchnorrSignature } from '@aztec/circuits.js/barretenberg';
+import {
+  deserializeGame,
+  deserializeGameTodo,
+  deserializeOpenChannel,
+  gameKey,
+  getAztecGameState,
+  getTimeout,
+  storeGame,
+} from 'utils';
+import { Game, JoinGameResponse, SerializedGame } from 'utils/types';
+import _ from 'lodash';
 const { REACT_APP_API_URL: API_URL } = process.env;
 
-type StateChannel = BaseStateChannel | ContinuedStateChannel;
-
-type Game = {
-  challenger: string;
-  challengerOpenSignature: SchnorrSignature;
-  channel: StateChannel | undefined;
-  host: string;
-  id: string;
-  lastPostedTurn: number;
-  timeout: number;
-  // @TODO: Remove any
-  turns: any[];
-  turnIndex: number;
-};
+export type StateChannel = BaseStateChannel | ContinuedStateChannel;
 
 export enum TTZSocketEvent {
   AnswerTimeout = 'game:answerTimeout',
@@ -53,10 +49,8 @@ export enum TTZSocketEvent {
 }
 
 type UserContextType = {
-  activeChannel: StateChannel | null;
   activeGame: any;
   contract: AztecAddress | null;
-  initializeChannel: (game: any, startTurn?: number) => void;
   latestPostedTurn: number;
   setActiveGame: Dispatch<SetStateAction<any>>;
   setLatestPostedTurn: Dispatch<SetStateAction<number>>;
@@ -67,10 +61,8 @@ type UserContextType = {
 };
 
 const UserContext = createContext<UserContextType>({
-  activeChannel: null,
   activeGame: null,
   contract: null,
-  initializeChannel: () => null,
   latestPostedTurn: -1,
   setActiveGame: () => {},
   setLatestPostedTurn: () => {},
@@ -86,7 +78,6 @@ export const UserProvider: React.FC<{ children: JSX.Element }> = ({
   const socket = useSocket();
 
   // const { REACT_APP_API_KEY } = process.env;
-  const [activeChannel, setActiveChannel] = useState<StateChannel | null>(null);
   const [activeGame, setActiveGame] = useState<any>(null);
   const [contract, setContract] = useState<AztecAddress | null>(null);
   const [latestPostedTurn, setLatestPostedTurn] = useState(0);
@@ -94,29 +85,6 @@ export const UserProvider: React.FC<{ children: JSX.Element }> = ({
   const [wallet, setWallet] = useState<AccountWalletWithPrivateKey | null>(
     null
   );
-
-  const initializeChannel = (game: any, startTurn?: number) => {
-    if (!wallet || !contract) return;
-
-    let channel = undefined;
-    // Restore channel
-    if (!startTurn) {
-      channel = new BaseStateChannel(wallet, contract, BigInt(game.gameId));
-      channel.openChannelResult = game.executionResults.open;
-    } else {
-      channel = new ContinuedStateChannel(
-        wallet,
-        contract,
-        BigInt(game.gameId),
-        startTurn
-      );
-    }
-    const diff = game.turnIndex - game.executionResults.turn.length;
-    channel.turnResults = game.executionResults.turn.slice(
-      startTurn ? startTurn - diff : 0
-    );
-    setActiveChannel(channel);
-  };
 
   const signIn = async (key: string) => {
     setSigningIn(true);
@@ -162,32 +130,25 @@ export const UserProvider: React.FC<{ children: JSX.Element }> = ({
   useEffect(() => {
     if (!contract || !wallet) return;
     (async () => {
-      // TODO: Read from IndexedDB
-      const res = await fetch(`${API_URL}/game/in-game`, {
-        headers: {
-          'X-Address': wallet.getCompleteAddress().address.toString(),
-        },
-      });
-      const data = await res.json();
-      if (data.game) {
-        // Get latest game state posted onchain
-        const latestPostedState = await getAztecGameState(
-          data.game.gameId,
+      const serializedGame = localStorage.getItem(gameKey(wallet.getAddress()));
+      if (serializedGame) {
+        const game: Game = deserializeGameTodo(
+          JSON.parse(serializedGame) as SerializedGame,
           wallet,
           contract
         );
-        const lastStoredTurn = latestPostedState.turn;
-
-        const deserialized = deserializeGame(data.game);
-        deserialized.over = latestPostedState.over;
-        deserialized.timeout = await getTimeout(
-          data.game.gameId,
-          wallet,
-          contract
-        );
-        setActiveGame(deserialized);
-        setLatestPostedTurn(Number(lastStoredTurn));
-        initializeChannel(deserialized, Number(lastStoredTurn));
+        // Check if updated data has been posted onchain in case of timeout
+        if (game.id) {
+          const latestPostedState = await getAztecGameState(
+            game.id,
+            wallet,
+            contract
+          );
+          game.lastPostedTurn = Number(latestPostedState.turn);
+          game.over = latestPostedState.over;
+          game.timeout = await getTimeout(game.id, wallet, contract);
+        }
+        setActiveGame(game);
       }
     })();
   }, [wallet]);
@@ -195,10 +156,16 @@ export const UserProvider: React.FC<{ children: JSX.Element }> = ({
   useEffect(() => {
     if (!wallet || !socket) return;
 
-    const handleGameJoin = (data: any) => {
-      const deserialized = deserializeGame(data);
-      setActiveGame(deserialized);
-      initializeChannel(deserialized);
+    const handleGameJoin = (data: JoinGameResponse) => {
+      setActiveGame((prev: Game) => {
+        const clone = _.cloneDeep(prev);
+        clone.challenger = AztecAddress.fromString(data.address);
+        clone.id = data.id;
+        clone.challengerOpenSignature = deserializeOpenChannel(data.signature);
+        // Store updated game state locally
+        storeGame(clone, wallet.getAddress());
+        return clone;
+      });
     };
 
     const handleSubmittedGame = () => {
@@ -208,7 +175,6 @@ export const UserProvider: React.FC<{ children: JSX.Element }> = ({
     const handleFinalizeTurn = (data: any) => {
       const deserialized = deserializeGame(data);
       setActiveGame(deserialized);
-      initializeChannel(deserialized, latestPostedTurn);
     };
 
     const handleTimeoutAnswered = async (data: any) => {
@@ -224,7 +190,6 @@ export const UserProvider: React.FC<{ children: JSX.Element }> = ({
       deserialized.timeout = timeout;
       setActiveGame(deserialized);
       setLatestPostedTurn(Number(lastStoredTurn));
-      initializeChannel(deserialized, Number(lastStoredTurn));
     };
 
     const handleTimeoutTriggered = async (data: any) => {
@@ -241,10 +206,8 @@ export const UserProvider: React.FC<{ children: JSX.Element }> = ({
         const deserialized = deserializeGame(data);
         deserialized.timeout = timeout;
         setActiveGame(deserialized);
-        initializeChannel(deserialized, Number(lastStoredTurn));
       } else {
         setActiveGame((prev: any) => {
-          initializeChannel(prev, Number(lastStoredTurn));
           return {
             ...prev,
             timeout,
@@ -256,19 +219,16 @@ export const UserProvider: React.FC<{ children: JSX.Element }> = ({
     const handleSignOpen = (data: any) => {
       const deserialized = deserializeGame(data);
       setActiveGame(deserialized);
-      initializeChannel(deserialized);
     };
 
     const handleSignOpponentTurn = (data: any) => {
       const deserialized = deserializeGame(data);
       setActiveGame(deserialized);
-      initializeChannel(deserialized, latestPostedTurn);
     };
 
     const handleTurn = (data: any) => {
       const deserialized = deserializeGame(data);
       setActiveGame(deserialized);
-      initializeChannel(deserialized, latestPostedTurn);
     };
 
     socket.on(TTZSocketEvent.JoinGame, handleGameJoin);
@@ -297,9 +257,7 @@ export const UserProvider: React.FC<{ children: JSX.Element }> = ({
     <UserContext.Provider
       value={{
         wallet,
-        activeChannel,
         activeGame,
-        initializeChannel,
         latestPostedTurn,
         setActiveGame,
         setLatestPostedTurn,
