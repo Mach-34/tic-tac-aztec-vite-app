@@ -503,8 +503,6 @@ export default function GameView(): JSX.Element {
     }
   }, [activeGame, signingIn]);
 
-  console.log('Active game: ', activeGame);
-
   return (
     <MainLayout>
       <div className='flex items-center justify-between p-4'>
