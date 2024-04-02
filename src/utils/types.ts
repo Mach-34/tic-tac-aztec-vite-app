@@ -72,7 +72,8 @@ export type SignTurnResponse = {
 
 
 export type StartGameResponse = {
-    address: string
+    host: string,
+    mongoId: string
 }
 
 export type TriggerTimeoutResponse = {
