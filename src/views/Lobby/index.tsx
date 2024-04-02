@@ -18,56 +18,67 @@ import { SocketCallbackResponse, StartGameResponse } from 'utils/types';
 
 const { REACT_APP_API_URL: API_URL } = process.env;
 
+type OpenGame = {
+  mongoId: string;
+  host: string;
+};
+
 export default function Lobby(): JSX.Element {
   const { contract, setActiveGame, signedIn, wallet } = useUser();
   const socket = useSocket();
-  const [games, setGames] = useState<string[]>([]);
+  const [games, setGames] = useState<OpenGame[]>([]);
   const navigate = useNavigate();
 
   const handleGameStart = useCallback(
     async (res: StartGameResponse) => {
-      setGames((prev: string[]) => [...prev, res.address]);
+      setGames((prev: OpenGame[]) => [...prev, res]);
     },
     [setGames]
   );
 
-  const joinGame = async (opponent: string) => {
+  const joinGame = async (game: OpenGame) => {
     if (!contract || !socket || !wallet) return;
 
     // get address
     const address = wallet.getAddress();
+    const host = AztecAddress.fromString(game.host);
 
     // Sign open channel as guest
     const guestChannelOpenSignature = BaseStateChannel.signOpenChannel(
       wallet,
-      AztecAddress.fromString(opponent),
+      host,
       true
     );
 
     // Generate unique id
-    const id = genAztecId(AztecAddress.fromString(opponent), address);
+    const id = genAztecId(host, address);
 
     // Initialize game state
-    const game = initNewGame();
-    game.channel = new BaseStateChannel(wallet, contract, BigInt(id));
-    game.challenger = address;
-    game.challengerOpenSignature = guestChannelOpenSignature;
-    game.host = AztecAddress.fromString(opponent);
-    game.id = id;
+    const newGame = initNewGame();
+    newGame.channel = new BaseStateChannel(wallet, contract, BigInt(id));
+    newGame.challenger = address;
+    newGame.challengerOpenSignature = guestChannelOpenSignature;
+    newGame.host = host;
+    newGame.id = id;
 
     socket.emit(
       TTZSocketEvent.JoinGame,
       {
         address: address.toString(),
         id,
+        mongoId: game.mongoId,
         signature: serializeOpenChannel(guestChannelOpenSignature),
       },
       (res: SocketCallbackResponse) => {
         if (res.status === 'success') {
-          setActiveGame(game);
+          setActiveGame(newGame);
           // Store game state in local storage
-          storeGame(game, address);
-          setGames((prev) => prev.filter((host) => host === opponent));
+          storeGame(newGame, address);
+          setGames((prev) =>
+            prev.filter(
+              (prevGame: OpenGame) => prevGame.host === host.toString()
+            )
+          );
           navigate('/game/pending');
         }
       }
@@ -125,13 +136,13 @@ export default function Lobby(): JSX.Element {
           <div className='mt-10 w-1/2'>
             {games
               .filter(
-                (host: string) => host !== wallet?.getAddress().toString()
+                ({ host }: OpenGame) => host !== wallet?.getAddress().toString()
               )
-              .map((host: string, index: number) => (
+              .map((game: OpenGame, index: number) => (
                 <div className='flex items-center gap-2 mb-8' key={index}>
-                  {formatAztecAddress(host)}
+                  {formatAztecAddress(game.host)}
                   {signedIn && (
-                    <Button onClick={() => joinGame(host)} text='Join' />
+                    <Button onClick={() => joinGame(game)} text='Join' />
                   )}
                 </div>
               ))}

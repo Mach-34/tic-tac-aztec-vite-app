@@ -124,7 +124,6 @@ export const UserProvider: React.FC<{ children: JSX.Element }> = ({
     const { address: contractAddress } = await fetch(
       `${API_URL}/game/contract`
     ).then(async (res) => await res.json());
-    console.log('Got address: ', contractAddress);
 
     // set state
     setWallet(wallet);
@@ -199,6 +198,7 @@ export const UserProvider: React.FC<{ children: JSX.Element }> = ({
       setActiveGame((prev: Game) => {
         const clone = cloneGame(prev);
         const lastPostedTurn = clone.lastPostedTurn + 1;
+
         clone.channel = new ContinuedStateChannel(
           wallet,
           contract,

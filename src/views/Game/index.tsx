@@ -21,6 +21,7 @@ import {
 import { ADDRESS_ZERO, WINNING_PLACEMENTS } from 'utils/constants';
 import { Game, SocketCallbackResponse, Turn } from 'utils/types';
 import { SchnorrSignature } from '@aztec/circuits.js/barretenberg';
+import StatusBadge from './components/StatusBadge';
 // import DuplicationFraudModal from './components/DuplicationFraudModal';
 
 export default function GameView(): JSX.Element {
@@ -29,11 +30,11 @@ export default function GameView(): JSX.Element {
   const navigate = useNavigate();
   const [answeringTimeout, setAnsweringTimeout] = useState(false);
   const [board, setBoard] = useState<number[]>([]);
-  // const [showDuplicationModal, setShowDuplicationModal] = useState(false);
+  const [finalizingTurn, setFinalizingTurn] = useState(false);
+  const [signingTurn, setSigningTurn] = useState(false);
   const [showPiece, setShowPiece] = useState({ row: -1, col: -1 });
   const [submittingGame, setSubmittingGame] = useState(false);
   const [triggeringTimeout, setTriggeringTimeout] = useState(false);
-  // const [showSignatureModal, setShowSignatureModal] = useState(false);
 
   /**
    * Checks if current board has a winnning placement
@@ -84,7 +85,7 @@ export default function GameView(): JSX.Element {
   }, [activeGame]);
 
   const gameOver = useMemo(() => {
-    if (!activeGame) return;
+    if (!activeGame) return 0;
 
     const finalized = activeGame.turnIndex === activeGame.turns.length;
     const winningPlacement = checkWinningPlacement();
@@ -97,7 +98,8 @@ export default function GameView(): JSX.Element {
   }, [activeGame, board, isHost]);
 
   const signOpponentTurn = async () => {
-    if (!wallet || !socket) return;
+    if (!socket || !wallet) return;
+    setSigningTurn(true);
     const turn = activeGame.turns[activeGame.turnIndex];
 
     const move = new Move(
@@ -125,6 +127,7 @@ export default function GameView(): JSX.Element {
             return clone;
           });
         }
+        setSigningTurn(false);
       }
     );
   };
@@ -194,7 +197,7 @@ export default function GameView(): JSX.Element {
           <Button
             className='my-2'
             key='Finalize Turn'
-            onClick={() => submitTurn()}
+            onClick={() => finalizeTurn()}
             text='Finalize Turn'
           />
         );
@@ -278,7 +281,7 @@ export default function GameView(): JSX.Element {
                 BigInt(clone.id),
                 lastPostedTurn
               );
-              clone.lastPostedTurn += lastPostedTurn;
+              clone.lastPostedTurn = lastPostedTurn;
               clone.timeout = 0;
               clone.turns.push(turn);
               clone.turnIndex += 1;
@@ -320,83 +323,6 @@ export default function GameView(): JSX.Element {
       }
     );
   };
-
-  const statusMessage = useMemo(() => {
-    if (!activeGame) return '';
-
-    const channel = activeGame.channel;
-    const channelOpen =
-      channel instanceof ContinuedStateChannel || !!channel?.openChannelResult;
-    const currentTurn = activeGame.turns[activeGame.turnIndex];
-
-    const isTurn = isHost
-      ? activeGame.turnIndex % 2 === 0
-      : activeGame.turnIndex % 2 === 1;
-
-    const submitted = activeGame.over;
-
-    // Game over message
-    if (gameOver) {
-      const submitText = ' Please submit game to Aztec';
-      const lossMessage = `Your opponent won the game.${
-        !submitted ? submitText : ''
-      }`;
-      const winMessage = `You won the game!${!submitted ? submitText : ''}`;
-      if (gameOver === 3) {
-        return `Game ended in draw.${!submitted ? submitText : ''}`;
-      } else if (gameOver === 2) {
-        return isHost ? lossMessage : winMessage;
-      } else {
-        return isHost ? winMessage : lossMessage;
-      }
-    }
-
-    // Text displayed when challenger needs to join game
-    else if (activeGame.challenger.toString() === ADDRESS_ZERO) {
-      return 'Waiting for opponent to join.';
-    }
-
-    // If two players join game but have not both signed to open a channel
-    else if (!channelOpen) {
-      if (isHost) {
-        return 'Opponent has joined game and signed channel open. Please provide your signature to start the game';
-      } else {
-        return 'Waiting on host to sign channel open.';
-      }
-    } else if (answeringTimeout) {
-      return 'Answering timeout...';
-    } else if (activeGame.timeout > 0n) {
-      if (isTurn) {
-        return 'Your opponent has triggered a timeout against you. Please answer within the remaining time';
-      } else {
-        return 'Waiting for opponent to answer timeout';
-      }
-    }
-
-    // If opponent's move requires signature
-    else if (currentTurn && !currentTurn.opponentSignature) {
-      if (isTurn) {
-        return 'Waiting on opponent to sign move.';
-      } else {
-        return `Please sign your opponent's move`;
-      }
-    }
-
-    // Waiting for opponent to finalize turn
-    else if (activeGame.turnIndex !== activeGame.turns.length) {
-      if (isTurn) {
-        return 'Opponent signature provided. Please finalize your turn and generate execution result.';
-      } else {
-        return 'Waiting on opponent to finalize turn.';
-      }
-    } else {
-      if (isTurn) {
-        return 'Please take your turn.';
-      } else {
-        return 'Waiting on opponents turn.';
-      }
-    }
-  }, [activeGame, answeringTimeout, gameOver, isHost]);
 
   const placePiece = async (row: number, col: number) => {
     const channel = activeGame.channel;
@@ -453,10 +379,11 @@ export default function GameView(): JSX.Element {
     }
   };
 
-  const submitTurn = async () => {
+  const finalizeTurn = async () => {
     const clone = cloneGame(activeGame);
     const channel = clone.channel;
     if (!channel || !socket || !wallet) return;
+    setFinalizingTurn(true);
     const turn = clone.turns[activeGame.turnIndex];
 
     const move = channel.buildMove(turn.row, turn.col);
@@ -470,7 +397,7 @@ export default function GameView(): JSX.Element {
       {
         turnResult: turnResult.toJSON(),
       },
-      (res: any) => {
+      (res: SocketCallbackResponse) => {
         if (res.status === 'success') {
           clone.turnIndex += 1;
           setActiveGame(clone);
@@ -478,6 +405,7 @@ export default function GameView(): JSX.Element {
           // Update locally stored game
           storeGame(clone, wallet.getAddress());
         }
+        setFinalizingTurn(false);
       }
     );
   };
@@ -545,6 +473,7 @@ export default function GameView(): JSX.Element {
           if (payload.turnResult) {
             clone.turnIndex += 1;
           }
+          clone.lastPostedTurn = clone.turnIndex;
           setActiveGame(clone);
           // Update locally stored game
           storeGame(clone, wallet.getAddress());
@@ -561,30 +490,41 @@ export default function GameView(): JSX.Element {
       constructBoard();
     }
     // Check if turn needs to be finalized
-    //   const isTurn = isHost
-    //     ? activeGame.turnIndex % 2 === 0
-    //     : activeGame.turnIndex % 2 === 1;
-    //   const currentTurn = activeGame.turns[activeGame.turnIndex];
-    //   if (
-    //     isTurn &&
-    //     currentTurn?.opponentSignature &&
-    //     activeGame.turnIndex !== activeGame.turns.length
-    //   ) {
-    //     submitTurn();
-    //   }
-    // }
+    if (activeGame) {
+      const isTurn = isHost
+        ? activeGame.turnIndex % 2 === 0
+        : activeGame.turnIndex % 2 === 1;
+      const opponentSigned =
+        activeGame.turns[activeGame.turnIndex]?.opponentSignature;
+      const finalized = activeGame.turnIndex === activeGame.turns.length;
+      if (isTurn && opponentSigned && !finalized) {
+        finalizeTurn();
+      }
+    }
   }, [activeGame, signingIn]);
 
   return (
     <MainLayout>
       <div className='flex items-center justify-between p-4'>
-        <div>{statusMessage}</div>
+        <div>
+          <StatusBadge
+            answeringTimeout={answeringTimeout}
+            challengerJoined={
+              activeGame?.challenger.toString() === ADDRESS_ZERO
+            }
+            channel={activeGame?.channel}
+            currentTurn={activeGame?.turns[activeGame.turnIndex]}
+            finalizingTurn={finalizingTurn}
+            gameOver={gameOver}
+            isHost={isHost}
+            signingTurn={signingTurn}
+            submitted={!!activeGame?.over}
+            timeout={activeGame?.timeout ?? 0}
+            turnIndex={activeGame?.turnIndex ?? 0}
+            turns={activeGame?.turns ?? []}
+          />
+        </div>
         <div>{actions}</div>
-        {/* <Button
-          onClick={() => setShowDuplicationModal(true)}
-          Icon={BookCopy}
-          text='Prove Duplication Fraud'
-        /> */}
       </div>
       <div className='flex flex-col items-center justify-center h-full gap-10'>
         <div>
@@ -640,11 +580,6 @@ export default function GameView(): JSX.Element {
           )}
         </div>
       </div>
-      {/* <DuplicationFraudModal
-        game={activeGame}
-        onClose={() => setShowDuplicationModal(false)}
-        open={showDuplicationModal}
-      /> */}
     </MainLayout>
   );
 }
