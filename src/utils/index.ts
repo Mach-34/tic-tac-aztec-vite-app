@@ -117,8 +117,14 @@ export const deserializeGame = (
     let channel = undefined;
     if (serialized.lastPostedTurn) {
         channel = new ContinuedStateChannel(wallet, contractAddress, BigInt(serialized.id), serialized.lastPostedTurn);
-        const diff = serialized.turnIndex - serialized.turnResults.length;
-        channel.turnResults = serialized.turnResults.slice(diff).map(res => AppExecutionResult.fromJSON(res));
+        const diff = serialized.turnIndex - serialized.lastPostedTurn;
+        // Check if turn results have already been sliced
+        if (diff === serialized.turnResults.length) {
+            channel.turnResults = serialized.turnResults.map(res => AppExecutionResult.fromJSON(res));
+        } else {
+            channel.turnResults = serialized.turnResults.slice(diff).map(res => AppExecutionResult.fromJSON(res))
+        }
+
     } else if (serialized.id) {
         channel = new BaseStateChannel(wallet, contractAddress, BigInt(serialized.id));
         channel.openChannelResult = serialized.openChannelResult ? AppExecutionResult.fromJSON(serialized.openChannelResult) : undefined;

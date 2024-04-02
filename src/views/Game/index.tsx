@@ -281,7 +281,7 @@ export default function GameView(): JSX.Element {
                 BigInt(clone.id),
                 lastPostedTurn
               );
-              clone.lastPostedTurn += lastPostedTurn;
+              clone.lastPostedTurn = lastPostedTurn;
               clone.timeout = 0;
               clone.turns.push(turn);
               clone.turnIndex += 1;
@@ -473,6 +473,7 @@ export default function GameView(): JSX.Element {
           if (payload.turnResult) {
             clone.turnIndex += 1;
           }
+          clone.lastPostedTurn = clone.turnIndex;
           setActiveGame(clone);
           // Update locally stored game
           storeGame(clone, wallet.getAddress());
@@ -489,17 +490,20 @@ export default function GameView(): JSX.Element {
       constructBoard();
     }
     // Check if turn needs to be finalized
-    const isTurn = isHost
-      ? activeGame.turnIndex % 2 === 0
-      : activeGame.turnIndex % 2 === 1;
-    const currentTurn = activeGame.turns[activeGame.turnIndex];
-    const finalized =
-      !!currentTurn?.opponentSignature &&
-      activeGame.turnIndex === activeGame.turns.length;
-    if (isTurn && !finalized) {
-      finalizeTurn();
+    if (activeGame) {
+      const isTurn = isHost
+        ? activeGame.turnIndex % 2 === 0
+        : activeGame.turnIndex % 2 === 1;
+      const opponentSigned =
+        activeGame.turns[activeGame.turnIndex]?.opponentSignature;
+      const finalized = activeGame.turnIndex === activeGame.turns.length;
+      if (isTurn && opponentSigned && !finalized) {
+        finalizeTurn();
+      }
     }
   }, [activeGame, signingIn]);
+
+  console.log('Active game: ', activeGame);
 
   return (
     <MainLayout>

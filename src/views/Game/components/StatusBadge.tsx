@@ -138,8 +138,8 @@ export default function StatusBadge({
         return {
           status: signingTurn ? StatusType.Pending : StatusType.ActionRequired,
           text: signingTurn
-            ? 'Signing opponenet move'
-            : `Please sign your opponent's move`,
+            ? 'Signing opponent move...'
+            : `Please sign your opponent's move.`,
         };
       }
     }
