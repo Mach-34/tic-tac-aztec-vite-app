@@ -15,11 +15,17 @@ import {
   answerTimeout,
   cloneGame,
   getTimeout,
+  proveDoubleSpendFraud,
   storeGame,
   triggerManualTimeout,
 } from 'utils';
 import { ADDRESS_ZERO, WINNING_PLACEMENTS } from 'utils/constants';
-import { Game, SocketCallbackResponse, Turn } from 'utils/types';
+import {
+  DoubleSpendFraudPayload,
+  Game,
+  SocketCallbackResponse,
+  Turn,
+} from 'utils/types';
 import { SchnorrSignature } from '@aztec/circuits.js/barretenberg';
 import StatusBadge from './components/StatusBadge';
 // import DuplicationFraudModal from './components/DuplicationFraudModal';
@@ -130,6 +136,37 @@ export default function GameView(): JSX.Element {
         setSigningTurn(false);
       }
     );
+  };
+
+  const checkFraud = async () => {
+    // Check premature timeout fraud
+    // const { lastPostedTurn, timeout } = activeGame;
+    // // Look for turn greater than or equal to last posted turn
+    // if (timeout) {
+    //   const triggerer =
+    //     lastPostedTurn % 2 === 0 ? activeGame.challenger : activeGame.host;
+    //   const found = activeGame.turns
+    //     .slice(lastPostedTurn - 1)
+    //     .findIndex((turn) => {
+    //       // Missing signature timeout
+    //       // Next turn timeout
+    //       if (turn.turnIndex >= lastPostedTurn) {
+    //         return;
+    //       }
+    //     });
+    // }
+
+    // Check duplicate signature fraud
+    const turnCountMap: { [turnIndex: number]: Turn } = {};
+    for (const turn of activeGame.turns) {
+      // Check if turn has already been sto
+      if (!!turnCountMap[turn.turnIndex]) {
+        await proveDoubleSpend(turnCountMap[turn.turnIndex], turn);
+        return true;
+      }
+      turnCountMap[turn.turnIndex] = turn;
+    }
+    return false;
   };
 
   const actions = useMemo(() => {
@@ -379,6 +416,19 @@ export default function GameView(): JSX.Element {
     }
   };
 
+  const proveDoubleSpend = async (moveOne: Turn, moveTwo: Turn) => {
+    if (!wallet) return;
+    const payload: DoubleSpendFraudPayload = {
+      firstMove: [moveOne.row, moveOne.col],
+      firstSignature: SchnorrSignature.fromString(moveOne.senderSignature!),
+      gameId: moveOne.gameId,
+      secondMove: [moveTwo.row, moveTwo.col],
+      secondSignature: SchnorrSignature.fromString(moveTwo.senderSignature!),
+      turnIndex: moveOne.turnIndex,
+    };
+    await proveDoubleSpendFraud(wallet, wallet.getAddress(), payload);
+  };
+
   const finalizeTurn = async () => {
     const clone = cloneGame(activeGame);
     const channel = clone.channel;
@@ -483,24 +533,29 @@ export default function GameView(): JSX.Element {
   };
 
   useEffect(() => {
-    // Kick back to lobby if not in game
-    if (!signingIn && !activeGame) {
-      navigate('/lobby');
-    } else {
-      constructBoard();
-    }
-    // Check if turn needs to be finalized
-    if (activeGame) {
-      const isTurn = isHost
-        ? activeGame.turnIndex % 2 === 0
-        : activeGame.turnIndex % 2 === 1;
-      const opponentSigned =
-        activeGame.turns[activeGame.turnIndex]?.opponentSignature;
-      const finalized = activeGame.turnIndex === activeGame.turns.length;
-      if (isTurn && opponentSigned && !finalized) {
-        finalizeTurn();
+    (async () => {
+      // Kick back to lobby if not in game
+      if (!signingIn && !activeGame) {
+        navigate('/lobby');
+      } else {
+        constructBoard();
       }
-    }
+      // Check if turn needs to be finalized
+      if (activeGame) {
+        if (!(await checkFraud())) {
+          // Finalize turn
+          const isTurn = isHost
+            ? activeGame.turnIndex % 2 === 0
+            : activeGame.turnIndex % 2 === 1;
+          const opponentSigned =
+            activeGame.turns[activeGame.turnIndex]?.opponentSignature;
+          const finalized = activeGame.turnIndex === activeGame.turns.length;
+          if (isTurn && opponentSigned && !finalized) {
+            finalizeTurn();
+          }
+        }
+      }
+    })();
   }, [activeGame, signingIn]);
 
   return (

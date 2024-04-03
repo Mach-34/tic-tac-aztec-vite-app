@@ -1,7 +1,24 @@
 import { AztecAddress } from '@aztec/circuits.js';
 import { StateChannel } from 'contexts/UserContext';
 import { OpenChannelSignature } from '@mach-34/aztec-statechannel-tictactoe/dest/src/channel/base';
-import { Move } from '@mach-34/aztec-statechannel-tictactoe';
+import { SchnorrSignature } from '@aztec/circuits.js/barretenberg';
+
+
+export type DoubleSpendFraudPayload = {
+    firstMove: number[];
+    firstSignature: SchnorrSignature;
+    gameId: string;
+    secondMove: number[];
+    secondSignature: SchnorrSignature;
+    turnIndex: number;
+}
+
+export type TimeoutFraudPayload = {
+    gameId: string;
+    move: number[];
+    signature: SchnorrSignature;
+    turnIndex: number;
+}
 
 export type Game = {
     challenger: AztecAddress;
