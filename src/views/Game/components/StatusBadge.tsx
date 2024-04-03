@@ -24,6 +24,7 @@ type StatusBadgeProps = {
   signingTurn: boolean;
   submitted: boolean;
   timeout: number;
+  timeoutExpired: boolean;
   turnIndex: number;
   turns: Turn[];
 };
@@ -39,15 +40,16 @@ export default function StatusBadge({
   signingTurn,
   submitted,
   timeout,
+  timeoutExpired,
   turnIndex,
   turns,
 }: StatusBadgeProps): JSX.Element {
   const badgeColor: { [status: StatusType]: string } = {
-    [StatusType.ActionRequired]: '#D63122',
+    [StatusType.ActionRequired]: '#47D822',
     [StatusType.Draw]: '#DAE021',
     [StatusType.Lost]: '#D63122',
     [StatusType.Pending]: '#DAE021',
-    [StatusType.Waiting]: '#47D822',
+    [StatusType.Waiting]: '#D63122',
     [StatusType.Won]: '#47D822',
   };
 
@@ -110,7 +112,15 @@ export default function StatusBadge({
 
     // Check timeout
     else if (timeout > 0) {
-      if (isTurn) {
+      // Check if timeout has expired
+      if (timeoutExpired) {
+        return {
+          status: StatusType.ActionRequired,
+          text: isTurn
+            ? 'You have lost the game from timeout expiry. Please submit'
+            : 'You have won the game from timeout expiry. Please submit',
+        };
+      } else if (isTurn) {
         return {
           status: answeringTimeout
             ? StatusType.Pending
@@ -183,6 +193,7 @@ export default function StatusBadge({
     signingTurn,
     submitted,
     timeout,
+    timeoutExpired,
     turnIndex,
     turns,
   ]);

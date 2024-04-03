@@ -24,7 +24,7 @@ type OpenGame = {
 };
 
 export default function Lobby(): JSX.Element {
-  const { contract, setActiveGame, signedIn, wallet } = useUser();
+  const { activeGame, contract, setActiveGame, signedIn, wallet } = useUser();
   const socket = useSocket();
   const [games, setGames] = useState<OpenGame[]>([]);
   const navigate = useNavigate();
@@ -132,23 +132,34 @@ export default function Lobby(): JSX.Element {
     <MainLayout>
       <div className='flex h-full justify-center'>
         <div className='text-center'>
-          <div className='mt-10 text-4xl'>Open Games</div>
-          <div className='mt-10 w-1/2'>
-            {games
-              .filter(
-                ({ host }: OpenGame) => host !== wallet?.getAddress().toString()
-              )
-              .map((game: OpenGame, index: number) => (
-                <div className='flex items-center gap-2 mb-8' key={index}>
-                  {formatAztecAddress(game.host)}
-                  {signedIn && (
-                    <Button onClick={() => joinGame(game)} text='Join' />
-                  )}
-                </div>
-              ))}
-          </div>
-          {signedIn && (
-            <Button Icon={Play} onClick={() => startGame()} text='Start game' />
+          {activeGame ? (
+            <>Todo</>
+          ) : (
+            <>
+              <div className='mt-10 text-4xl'>Open Games</div>
+              <div className='mt-10 w-1/2'>
+                {games
+                  .filter(
+                    ({ host }: OpenGame) =>
+                      host !== wallet?.getAddress().toString()
+                  )
+                  .map((game: OpenGame, index: number) => (
+                    <div className='flex items-center gap-2 mb-8' key={index}>
+                      {formatAztecAddress(game.host)}
+                      {signedIn && (
+                        <Button onClick={() => joinGame(game)} text='Join' />
+                      )}
+                    </div>
+                  ))}
+              </div>
+              {signedIn && (
+                <Button
+                  Icon={Play}
+                  onClick={() => startGame()}
+                  text='Start game'
+                />
+              )}
+            </>
           )}
         </div>
       </div>

@@ -13,7 +13,9 @@ import { useSocket } from 'contexts/SocketContext';
 import { AztecAddress } from '@aztec/circuits.js';
 import {
   answerTimeout,
+  claimTimeoutWin,
   cloneGame,
+  getAztecGameState,
   getTimeout,
   proveDoubleSpendFraud,
   storeGame,
@@ -69,12 +71,17 @@ export default function GameView(): JSX.Element {
     setBoard(board);
   };
 
+  const timeoutExpired = useMemo(() => {
+    if (!activeGame || !activeGame.timeout) return false;
+    return new Date().getTime() / 1000 >= activeGame.timeout;
+  }, [activeGame?.timeout]);
+
   const canMove = useMemo(() => {
     if (!activeGame) return;
     const channel = activeGame.channel;
     const channelOpened =
       channel instanceof ContinuedStateChannel || channel?.openChannelResult;
-    if (answeringTimeout || !channelOpened) return false;
+    if (answeringTimeout || !channelOpened || timeoutExpired) return false;
     const isHost =
       wallet?.getAddress().toString() === activeGame.host.toString();
 
@@ -83,7 +90,7 @@ export default function GameView(): JSX.Element {
       : activeGame.turnIndex % 2 === 1;
 
     return isTurn && activeGame.turns.length === activeGame.turnIndex;
-  }, [activeGame, answeringTimeout, wallet]);
+  }, [activeGame, answeringTimeout, timeoutExpired, wallet]);
 
   const isHost = useMemo(() => {
     if (!activeGame) return false;
@@ -191,7 +198,7 @@ export default function GameView(): JSX.Element {
       return arr;
     }
 
-    if (gameOver) {
+    if (gameOver || timeoutExpired) {
       arr.push(
         <Button
           className='my-2'
@@ -230,14 +237,14 @@ export default function GameView(): JSX.Element {
         currentTurn.opponentSignature &&
         activeGame.turnIndex !== activeGame.turns.length
       ) {
-        arr.push(
-          <Button
-            className='my-2'
-            key='Finalize Turn'
-            onClick={() => finalizeTurn()}
-            text='Finalize Turn'
-          />
-        );
+        // arr.push(
+        //   <Button
+        //     className='my-2'
+        //     key='Finalize Turn'
+        //     onClick={() => finalizeTurn()}
+        //     text='Finalize Turn'
+        //   />
+        // );
       }
     }
 
@@ -245,14 +252,14 @@ export default function GameView(): JSX.Element {
       // Timeout related actions
 
       if (activeGame.timeout > 0n && isTurn) {
-        arr.push(
-          <Button
-            className='my-2'
-            key='Dispute Timeout'
-            onClick={() => null}
-            text='Dispute Timeout'
-          />
-        );
+        // arr.push(
+        //   <Button
+        //     className='my-2'
+        //     key='Dispute Timeout'
+        //     onClick={() => null}
+        //     text='Dispute Timeout'
+        //   />
+        // );
       } else {
         // Case where we're waiting on opponent to sign our own turn
         const waitingOnOpponentSignature =
@@ -281,7 +288,14 @@ export default function GameView(): JSX.Element {
     }
 
     return arr;
-  }, [activeGame, gameOver, isHost, submittingGame, triggeringTimeout]);
+  }, [
+    activeGame,
+    gameOver,
+    isHost,
+    submittingGame,
+    timeoutExpired,
+    triggeringTimeout,
+  ]);
 
   const answerActiveTimeout = async (row: number, col: number) => {
     if (!contract || !socket || !wallet) return;
@@ -308,9 +322,14 @@ export default function GameView(): JSX.Element {
         },
         async (res: SocketCallbackResponse) => {
           if (res.status === 'success') {
+            const latestPostedState = await getAztecGameState(
+              activeGame.id,
+              wallet,
+              contract
+            );
             setActiveGame((prev: Game) => {
               const clone = cloneGame(prev);
-              const lastPostedTurn = clone.lastPostedTurn + 1;
+              const lastPostedTurn = Number(latestPostedState.turn);
               // Channel is continued
               clone.channel = new ContinuedStateChannel(
                 wallet,
@@ -319,9 +338,11 @@ export default function GameView(): JSX.Element {
                 lastPostedTurn
               );
               clone.lastPostedTurn = lastPostedTurn;
+              clone.over = latestPostedState.over;
               clone.timeout = 0;
               clone.turns.push(turn);
               clone.turnIndex += 1;
+
               // Update locally stored game
               storeGame(clone, wallet.getAddress());
               return clone;
@@ -397,10 +418,15 @@ export default function GameView(): JSX.Element {
   const submitGame = async () => {
     const clone = cloneGame(activeGame);
     const channel = clone.channel;
-    if (!channel || !socket) return;
+    if (!channel || !socket || !wallet) return;
     setSubmittingGame(true);
     try {
-      await channel.finalize();
+      // Check if timeout hash expired. If not finalize
+      if (timeoutExpired) {
+        await claimTimeoutWin(activeGame.id, wallet, wallet.getAddress());
+      } else {
+        await channel.finalize();
+      }
       socket.emit(
         TTZSocketEvent.SubmitGame,
         undefined,
@@ -412,6 +438,7 @@ export default function GameView(): JSX.Element {
         }
       );
     } catch (err) {
+      console.log('Flag: ', err);
       setSubmittingGame(false);
     }
   };
@@ -558,9 +585,11 @@ export default function GameView(): JSX.Element {
     })();
   }, [activeGame, signingIn]);
 
+  console.log('Active game: ', activeGame?.channel);
+
   return (
     <MainLayout>
-      <div className='flex items-center justify-between p-4'>
+      <div className='flex gap-4 items-center justify-between p-4'>
         <div>
           <StatusBadge
             answeringTimeout={answeringTimeout}
@@ -575,6 +604,7 @@ export default function GameView(): JSX.Element {
             signingTurn={signingTurn}
             submitted={!!activeGame?.over}
             timeout={activeGame?.timeout ?? 0}
+            timeoutExpired={timeoutExpired}
             turnIndex={activeGame?.turnIndex ?? 0}
             turns={activeGame?.turns ?? []}
           />

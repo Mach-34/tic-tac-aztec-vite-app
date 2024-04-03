@@ -1,6 +1,6 @@
 import Button from 'components/Button';
 import { Link, useLocation } from 'react-router-dom';
-import { Clock, KeyRound, RefreshCcw, User } from 'lucide-react';
+import { Clock, Gamepad2, KeyRound, RefreshCcw, User } from 'lucide-react';
 import Modal from 'components/Modal';
 import { useMemo, useState } from 'react';
 import { useUser } from 'contexts/UserContext';
@@ -30,22 +30,26 @@ export default function Header(): JSX.Element {
   return (
     <div className='bg-[#2D2047] flex items-center justify-between p-4'>
       <Link className='text-3xl text-white' to='/lobby'>
-        Tic-Tac-Aztec
+        Tic·Tac·Aztec
       </Link>
-      <div className='flex gap-2 items-center'>
+      <div className='flex items-center'>
         {activeGame?.timeout > 0n && (
-          <div className='bg-[#946DF2] flex gap-2 items-center px-2 rounded-xl'>
+          <div className='bg-[#913DE5] bg-opacity-50 flex gap-2 items-center mr-4 px-2 rounded-xl'>
             {countdown.minutes}:{countdown.seconds}
             <Clock size={18} />
           </div>
         )}
         {!!activeGame && !gameRoute && (
-          <Link className='bg-red rounded text-white' to='/game/pending'>
-            Go to game
+          <Link
+            className='border border-white bg-[#913DE5] bg-opacity-50 flex gap-2 items-center mr-4 px-2 rounded-full text-white'
+            to='/game/pending'
+          >
+            Back to game
+            <Gamepad2 size={18} />
           </Link>
         )}
         <Button
-          className='border-white border text-black'
+          className='text-black'
           Icon={signedIn ? User : KeyRound}
           loading={signingIn}
           onClick={() => setShowSignInModal(true)}

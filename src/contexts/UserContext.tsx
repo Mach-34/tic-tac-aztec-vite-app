@@ -195,9 +195,14 @@ export const UserProvider: React.FC<{ children: JSX.Element }> = ({
     const handleTimeoutAnswered = async (data: AnswerTimeoutResponse) => {
       const { turn } = data;
       if (!contract) return;
+      const latestPostedState = await getAztecGameState(
+        activeGame.id,
+        wallet,
+        contract
+      );
       setActiveGame((prev: Game) => {
         const clone = cloneGame(prev);
-        const lastPostedTurn = clone.lastPostedTurn + 1;
+        const lastPostedTurn = Number(latestPostedState.turn);
 
         clone.channel = new ContinuedStateChannel(
           wallet,
@@ -206,6 +211,7 @@ export const UserProvider: React.FC<{ children: JSX.Element }> = ({
           lastPostedTurn
         );
         clone.lastPostedTurn = lastPostedTurn;
+        clone.over = latestPostedState.over;
         clone.turnIndex += 1;
         clone.turns.push(turn);
         clone.timeout = 0;
