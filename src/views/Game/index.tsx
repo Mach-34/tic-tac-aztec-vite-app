@@ -156,7 +156,7 @@ export default function GameView(): JSX.Element {
     //     });
     // }
 
-    // Check duplicate signature fraud
+    // Check double spend fraud
     const turnCountMap: { [turnIndex: number]: Turn } = {};
     for (const turn of activeGame.turns) {
       // Check if turn has already been sto
