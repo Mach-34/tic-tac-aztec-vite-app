@@ -1,11 +1,10 @@
 import { AppExecutionResult } from "@aztec/circuit-types";
-import { SchnorrSignature } from "@aztec/circuits.js/barretenberg";
 import { AztecAddress, Fr } from "@aztec/circuits.js";
 import { pedersenHash } from "@aztec/foundation/crypto";
 import { BaseStateChannel, ContinuedStateChannel, TicTacToeContract } from '@mach-34/aztec-statechannel-tictactoe';
 import { OpenChannelSignature } from '@mach-34/aztec-statechannel-tictactoe/dest/src/channel/base';
 import { AccountWalletWithPrivateKey, Wallet } from "@aztec/aztec.js";
-import { Game, SerializedGame } from "./types";
+import { DoubleSpendFraudPayload, Game, SerializedGame, TimeoutFraudPayload } from "./types";
 import { ADDRESS_ZERO } from "./constants";
 import { StateChannel } from "contexts/UserContext";
 
@@ -17,6 +16,41 @@ export const answerTimeout = async (gameId: string, wallet: Wallet, address: Azt
     );
     await contract.methods
         .answer_timeout(BigInt(gameId), row, col)
+        .send()
+        .wait();
+}
+
+export const proveDoubleSpendFraud = async (wallet: Wallet, address: AztecAddress, payload: DoubleSpendFraudPayload) => {
+    const contract = await TicTacToeContract.at(
+        address,
+        wallet
+    );
+    await contract.methods
+        .claim_fraud_win(
+            BigInt(payload.gameId),
+            BigInt(payload.turnIndex),
+            payload.firstMove,
+            payload.secondMove,
+            [...new Uint8Array(payload.firstSignature.toBuffer())],
+            [...new Uint8Array(payload.secondSignature.toBuffer())]
+        )
+        .send()
+        .wait();
+}
+
+export const proveTimeoutFraud = async (wallet: Wallet, address: AztecAddress, payload: TimeoutFraudPayload) => {
+    const contract = await TicTacToeContract.at(
+        address,
+        wallet
+    );
+
+    await contract.methods
+        .dispute_timeout(
+            BigInt(payload.gameId),
+            payload.turnIndex,
+            payload.move,
+            [...new Uint8Array(payload.signature.toBuffer())]
+        )
         .send()
         .wait();
 }
