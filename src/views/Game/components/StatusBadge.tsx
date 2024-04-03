@@ -65,6 +65,12 @@ export default function StatusBadge({
         !submitted ? submitText : ''
       }`;
       const winMessage = `You won the game!${!submitted ? submitText : ''}`;
+      if (timeout > 0) {
+        return {
+          status: StatusType.ActionRequired,
+          text: 'Opponent has triggered timeout on winning turn',
+        };
+      }
       if (gameOver === 3) {
         return {
           status: submitted ? StatusType.Draw : StatusType.ActionRequired,

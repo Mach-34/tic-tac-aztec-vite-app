@@ -102,12 +102,12 @@ export default function GameView(): JSX.Element {
 
     const finalized = activeGame.turnIndex === activeGame.turns.length;
     const winningPlacement = checkWinningPlacement();
-    if (finalized && winningPlacement) {
+    if (activeGame.over || (finalized && winningPlacement)) {
       // 1 for host, 2 for challenger
       return activeGame.turnIndex % 2 === 1 ? 1 : 2;
     }
     // If game is draw return 0
-    return activeGame.turnIndex === 9 && finalized ? 3 : 0;
+    return activeGame.turnIndex === 9 && (finalized || activeGame.over) ? 3 : 0;
   }, [activeGame, board, isHost]);
 
   const signOpponentTurn = async () => {
@@ -418,12 +418,15 @@ export default function GameView(): JSX.Element {
   const submitGame = async () => {
     const clone = cloneGame(activeGame);
     const channel = clone.channel;
-    if (!channel || !socket || !wallet) return;
+    if (!channel || !contract || !socket || !wallet) return;
     setSubmittingGame(true);
     try {
       // Check if timeout hash expired. If not finalize
       if (timeoutExpired) {
-        await claimTimeoutWin(activeGame.id, wallet, wallet.getAddress());
+        await claimTimeoutWin(activeGame.id, wallet, contract);
+      } else if (activeGame.timeout > 0) {
+        // Answer timeout on ending move
+        await answerTimeout(activeGame.id, wallet, contract, 0, 0);
       } else {
         await channel.finalize();
       }
@@ -438,7 +441,7 @@ export default function GameView(): JSX.Element {
         }
       );
     } catch (err) {
-      console.log('Flag: ', err);
+      console.log('Err: ', err);
       setSubmittingGame(false);
     }
   };
@@ -512,7 +515,8 @@ export default function GameView(): JSX.Element {
       channel.turnResults.pop();
       await channel.turn(
         move,
-        SchnorrSignature.fromString(prevTurn.opponentSignature!),
+        // SchnorrSignature.fromString(prevTurn.opponentSignature!),
+        undefined,
         true
       );
       await channel.finalize();
@@ -558,6 +562,8 @@ export default function GameView(): JSX.Element {
       }
     );
   };
+
+  // console.log('Active game timeout: ', activeGame);
 
   useEffect(() => {
     (async () => {

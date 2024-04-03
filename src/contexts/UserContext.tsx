@@ -148,6 +148,7 @@ export const UserProvider: React.FC<{ children: JSX.Element }> = ({
             wallet,
             contract
           );
+          console.log('Latest state: ', latestPostedState);
           game.lastPostedTurn = Number(latestPostedState.turn);
           game.over = latestPostedState.over;
           game.timeout = Number(await getTimeout(game.id, wallet, contract));
