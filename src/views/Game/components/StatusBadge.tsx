@@ -47,13 +47,31 @@ export default function StatusBadge({
   turnIndex,
   turns,
 }: StatusBadgeProps): JSX.Element {
-  const badgeColor: { [status: StatusType]: string } = {
-    [StatusType.ActionRequired]: '#47D822',
-    [StatusType.Draw]: '#DAE021',
-    [StatusType.Lost]: '#D63122',
-    [StatusType.Pending]: '#DAE021',
-    [StatusType.Waiting]: '#D63122',
-    [StatusType.Won]: '#47D822',
+  const badgeColor: { [key in StatusType]: { border: string; bg: string } } = {
+    [StatusType.ActionRequired]: {
+      border: 'border-[#47D822]',
+      bg: 'bg-[#47D822]',
+    },
+    [StatusType.Draw]: {
+      border: 'border-[#DAE021]',
+      bg: 'bg-[#DAE021]',
+    },
+    [StatusType.Lost]: {
+      border: 'border-[#D63122]',
+      bg: 'bg-[#D63122]',
+    },
+    [StatusType.Pending]: {
+      border: 'border-[#DAE021]',
+      bg: 'bg-[#DAE021]',
+    },
+    [StatusType.Waiting]: {
+      border: 'border-[#D63122]',
+      bg: 'bg-[#D63122]',
+    },
+    [StatusType.Won]: {
+      border: 'border-[#47D822]',
+      bg: 'bg-[#47D822]',
+    },
   };
 
   // @TODO: Clean up messy logic
@@ -202,12 +220,13 @@ export default function StatusBadge({
     turns,
   ]);
 
+  const bg = `${badgeColor[msg.status].bg}`;
+  const border = `border ${badgeColor[msg.status].border}`;
+
+  const badgeClass = `${bg} ${border} bg-opacity-50 flex items-center gap-2 px-2 rounded-full w-fit`;
+
   return (
-    <div
-      className={`border border-[${badgeColor[msg.status]}] bg-[${
-        badgeColor[msg.status]
-      }] bg-opacity-50 flex items-center gap-2 px-2 rounded-full w-fit`}
-    >
+    <div className={badgeClass}>
       {msg.text}
       {msg.status === StatusType.Pending && (
         <Loader2 className='animate-spin' size={18} />
