@@ -233,17 +233,6 @@ export default function GameView(): JSX.Element {
       );
     }
 
-    if (!isTurn && currentTurn && !currentTurn.opponentSignature) {
-      arr.push(
-        <Button
-          className='my-2'
-          key='Sign Opponent Move'
-          onClick={() => signOpponentTurn()}
-          text='Sign Opponent Move'
-        />
-      );
-    }
-
     if (!gameOver && channelOpen && activeGame.turns.length) {
       // Timeout related actions
 
@@ -411,7 +400,8 @@ export default function GameView(): JSX.Element {
         // Answer timeout on ending move
         await answerTimeout(activeGame.id, wallet, contract, 0, 0);
       } else {
-        await channel.finalize();
+        const tx = await channel.finalize();
+        console.log('Aztec transaction: ', tx);
       }
       socket.emit(
         TTZSocketEvent.SubmitGame,
@@ -564,11 +554,16 @@ export default function GameView(): JSX.Element {
           const isTurn = isHost
             ? activeGame.turnIndex % 2 === 0
             : activeGame.turnIndex % 2 === 1;
-          const opponentSigned =
-            activeGame.turns[activeGame.turnIndex]?.opponentSignature;
+          const currentTurn = activeGame.turns[activeGame.turnIndex];
+          const opponentSigned = currentTurn && currentTurn.opponentSignature;
           const finalized = activeGame.turnIndex === activeGame.turns.length;
+          // Finalize turn
           if (isTurn && opponentSigned && !finalized) {
             finalizeTurn();
+          }
+          // Sign opponent turn
+          else if (!isTurn && currentTurn && !opponentSigned) {
+            signOpponentTurn();
           }
         }
       }
