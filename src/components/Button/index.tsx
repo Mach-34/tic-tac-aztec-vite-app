@@ -15,7 +15,7 @@ export default function Button({
   onClick,
   text,
 }: ButtonProps): JSX.Element {
-  const cn = `bg-[#2D2047] flex items-center gap-2 px-2 py-1 rounded-md text-white ${className}`;
+  const cn = `border border-[#913DE5] bg-[#913DE5] bg-opacity-50 flex items-center gap-2 px-2 py-1 rounded-md text-white ${className}`;
 
   return (
     <button className={cn} onClick={onClick}>

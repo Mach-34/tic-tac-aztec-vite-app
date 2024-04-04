@@ -20,6 +20,18 @@ export const answerTimeout = async (gameId: string, wallet: Wallet, address: Azt
         .wait();
 }
 
+export const claimTimeoutWin = async (gameId: string, wallet: Wallet, address: AztecAddress) => {
+    if (!wallet) return;
+    const contract = await TicTacToeContract.at(
+        address,
+        wallet
+    );
+    await contract.methods
+        .claim_timeout_win(BigInt(gameId))
+        .send()
+        .wait();
+}
+
 export const proveDoubleSpendFraud = async (wallet: Wallet, address: AztecAddress, payload: DoubleSpendFraudPayload) => {
     const contract = await TicTacToeContract.at(
         address,

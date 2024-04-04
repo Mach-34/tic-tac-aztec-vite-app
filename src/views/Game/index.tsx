@@ -13,7 +13,9 @@ import { useSocket } from 'contexts/SocketContext';
 import { AztecAddress } from '@aztec/circuits.js';
 import {
   answerTimeout,
+  claimTimeoutWin,
   cloneGame,
+  getAztecGameState,
   getTimeout,
   proveDoubleSpendFraud,
   storeGame,
@@ -28,11 +30,13 @@ import {
 } from 'utils/types';
 import { SchnorrSignature } from '@aztec/circuits.js/barretenberg';
 import StatusBadge from './components/StatusBadge';
+import useCountdown from 'hooks/useCountdown';
 // import DuplicationFraudModal from './components/DuplicationFraudModal';
 
 export default function GameView(): JSX.Element {
   const socket = useSocket();
   const { wallet, activeGame, setActiveGame, signingIn, contract } = useUser();
+  const countdown = useCountdown(Number(activeGame?.timeout ?? 0));
   const navigate = useNavigate();
   const [answeringTimeout, setAnsweringTimeout] = useState(false);
   const [board, setBoard] = useState<number[]>([]);
@@ -69,12 +73,17 @@ export default function GameView(): JSX.Element {
     setBoard(board);
   };
 
+  const timeoutExpired = useMemo(() => {
+    if (!activeGame || !activeGame.timeout) return false;
+    return countdown.minutes === '0' && countdown.seconds === '00';
+  }, [countdown]);
+
   const canMove = useMemo(() => {
     if (!activeGame) return;
     const channel = activeGame.channel;
     const channelOpened =
       channel instanceof ContinuedStateChannel || channel?.openChannelResult;
-    if (answeringTimeout || !channelOpened) return false;
+    if (answeringTimeout || !channelOpened || timeoutExpired) return false;
     const isHost =
       wallet?.getAddress().toString() === activeGame.host.toString();
 
@@ -83,7 +92,7 @@ export default function GameView(): JSX.Element {
       : activeGame.turnIndex % 2 === 1;
 
     return isTurn && activeGame.turns.length === activeGame.turnIndex;
-  }, [activeGame, answeringTimeout, wallet]);
+  }, [activeGame, answeringTimeout, timeoutExpired, wallet]);
 
   const isHost = useMemo(() => {
     if (!activeGame) return false;
@@ -93,14 +102,18 @@ export default function GameView(): JSX.Element {
   const gameOver = useMemo(() => {
     if (!activeGame) return 0;
 
+    const isDraw = activeGame.turnIndex === 9;
     const finalized = activeGame.turnIndex === activeGame.turns.length;
     const winningPlacement = checkWinningPlacement();
-    if (finalized && winningPlacement) {
+    // Case where win occurs from timeout or fraud
+    if (activeGame.over && !isDraw && !winningPlacement) {
+      return activeGame.turnIndex % 2 === 1 ? 1 : 2;
+    } else if ((activeGame.over || finalized) && winningPlacement) {
       // 1 for host, 2 for challenger
       return activeGame.turnIndex % 2 === 1 ? 1 : 2;
     }
     // If game is draw return 0
-    return activeGame.turnIndex === 9 && finalized ? 3 : 0;
+    return isDraw && (finalized || activeGame.over) ? 3 : 0;
   }, [activeGame, board, isHost]);
 
   const signOpponentTurn = async () => {
@@ -191,7 +204,11 @@ export default function GameView(): JSX.Element {
       return arr;
     }
 
-    if (gameOver) {
+    if (
+      (gameOver &&
+        (activeGame.timeout === 0 || (activeGame.timeout > 0 && isTurn))) ||
+      timeoutExpired
+    ) {
       arr.push(
         <Button
           className='my-2'
@@ -215,73 +232,53 @@ export default function GameView(): JSX.Element {
         />
       );
     }
-    if (currentTurn) {
-      if (!isTurn && !currentTurn.opponentSignature) {
-        arr.push(
-          <Button
-            className='my-2'
-            key='Sign Opponent Move'
-            onClick={() => signOpponentTurn()}
-            text='Sign Opponent Move'
-          />
-        );
-      } else if (
-        isTurn &&
-        currentTurn.opponentSignature &&
-        activeGame.turnIndex !== activeGame.turns.length
-      ) {
-        arr.push(
-          <Button
-            className='my-2'
-            key='Finalize Turn'
-            onClick={() => finalizeTurn()}
-            text='Finalize Turn'
-          />
-        );
-      }
+
+    if (!isTurn && currentTurn && !currentTurn.opponentSignature) {
+      arr.push(
+        <Button
+          className='my-2'
+          key='Sign Opponent Move'
+          onClick={() => signOpponentTurn()}
+          text='Sign Opponent Move'
+        />
+      );
     }
 
     if (!gameOver && channelOpen && activeGame.turns.length) {
       // Timeout related actions
 
-      if (activeGame.timeout > 0n && isTurn) {
+      // Case where we're waiting on opponent to sign our own turn
+      const waitingOnOpponentSignature =
+        isTurn && currentTurn && !currentTurn.opponentSignature;
+
+      // Case where we're waiting on opponent to take next turn
+      const waitingOnOpponentTurn =
+        !isTurn && activeGame.turnIndex === activeGame.turns.length;
+      if (
+        !activeGame.timeout &&
+        (waitingOnOpponentSignature || waitingOnOpponentTurn)
+      ) {
         arr.push(
           <Button
             className='my-2'
-            key='Dispute Timeout'
-            onClick={() => null}
-            text='Dispute Timeout'
+            key='Triggering Timeout'
+            loading={triggeringTimeout}
+            onClick={() => triggerTimeout()}
+            text={triggeringTimeout ? 'Triggering timeout' : 'Trigger timeout'}
           />
         );
-      } else {
-        // Case where we're waiting on opponent to sign our own turn
-        const waitingOnOpponentSignature =
-          isTurn && currentTurn && !currentTurn.opponentSignature;
-
-        // Case where we're waiting on opponent to take next turn
-        const waitingOnOpponentTurn =
-          !isTurn && activeGame.turnIndex === activeGame.turns.length;
-        if (
-          !activeGame.timeout &&
-          (waitingOnOpponentSignature || waitingOnOpponentTurn)
-        ) {
-          arr.push(
-            <Button
-              className='my-2'
-              key='Triggering Timeout'
-              loading={triggeringTimeout}
-              onClick={() => triggerTimeout()}
-              text={
-                triggeringTimeout ? 'Triggering timeout' : 'Trigger timeout'
-              }
-            />
-          );
-        }
       }
     }
 
     return arr;
-  }, [activeGame, gameOver, isHost, submittingGame, triggeringTimeout]);
+  }, [
+    activeGame,
+    gameOver,
+    isHost,
+    submittingGame,
+    timeoutExpired,
+    triggeringTimeout,
+  ]);
 
   const answerActiveTimeout = async (row: number, col: number) => {
     if (!contract || !socket || !wallet) return;
@@ -308,9 +305,14 @@ export default function GameView(): JSX.Element {
         },
         async (res: SocketCallbackResponse) => {
           if (res.status === 'success') {
+            const latestPostedState = await getAztecGameState(
+              activeGame.id,
+              wallet,
+              contract
+            );
             setActiveGame((prev: Game) => {
               const clone = cloneGame(prev);
-              const lastPostedTurn = clone.lastPostedTurn + 1;
+              const lastPostedTurn = Number(latestPostedState.turn);
               // Channel is continued
               clone.channel = new ContinuedStateChannel(
                 wallet,
@@ -319,9 +321,11 @@ export default function GameView(): JSX.Element {
                 lastPostedTurn
               );
               clone.lastPostedTurn = lastPostedTurn;
+              clone.over = latestPostedState.over;
               clone.timeout = 0;
               clone.turns.push(turn);
               clone.turnIndex += 1;
+
               // Update locally stored game
               storeGame(clone, wallet.getAddress());
               return clone;
@@ -397,21 +401,31 @@ export default function GameView(): JSX.Element {
   const submitGame = async () => {
     const clone = cloneGame(activeGame);
     const channel = clone.channel;
-    if (!channel || !socket) return;
+    if (!channel || !contract || !socket || !wallet) return;
     setSubmittingGame(true);
     try {
-      await channel.finalize();
+      // Check if timeout hash expired. If not finalize
+      if (timeoutExpired) {
+        await claimTimeoutWin(activeGame.id, wallet, contract);
+      } else if (activeGame.timeout > 0) {
+        // Answer timeout on ending move
+        await answerTimeout(activeGame.id, wallet, contract, 0, 0);
+      } else {
+        await channel.finalize();
+      }
       socket.emit(
         TTZSocketEvent.SubmitGame,
         undefined,
         (res: SocketCallbackResponse) => {
           if (res.status === 'success') {
+            clone.timeout = 0;
             clone.over = true;
             setActiveGame(clone);
           }
         }
       );
     } catch (err) {
+      console.log('Err: ', err);
       setSubmittingGame(false);
     }
   };
@@ -485,7 +499,8 @@ export default function GameView(): JSX.Element {
       channel.turnResults.pop();
       await channel.turn(
         move,
-        SchnorrSignature.fromString(prevTurn.opponentSignature!),
+        // SchnorrSignature.fromString(prevTurn.opponentSignature!),
+        undefined,
         true
       );
       await channel.finalize();
@@ -532,6 +547,8 @@ export default function GameView(): JSX.Element {
     );
   };
 
+  // console.log('Active game timeout: ', activeGame);
+
   useEffect(() => {
     (async () => {
       // Kick back to lobby if not in game
@@ -560,7 +577,7 @@ export default function GameView(): JSX.Element {
 
   return (
     <MainLayout>
-      <div className='flex items-center justify-between p-4'>
+      <div className='flex gap-4 items-center justify-between p-4'>
         <div>
           <StatusBadge
             answeringTimeout={answeringTimeout}
@@ -568,6 +585,7 @@ export default function GameView(): JSX.Element {
               activeGame?.challenger.toString() === ADDRESS_ZERO
             }
             channel={activeGame?.channel}
+            countdown={countdown}
             currentTurn={activeGame?.turns[activeGame.turnIndex]}
             finalizingTurn={finalizingTurn}
             gameOver={gameOver}
@@ -575,6 +593,7 @@ export default function GameView(): JSX.Element {
             signingTurn={signingTurn}
             submitted={!!activeGame?.over}
             timeout={activeGame?.timeout ?? 0}
+            timeoutExpired={timeoutExpired}
             turnIndex={activeGame?.turnIndex ?? 0}
             turns={activeGame?.turns ?? []}
           />
