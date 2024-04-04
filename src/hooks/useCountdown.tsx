@@ -9,7 +9,7 @@ const useCountdown = (expiry: number) => {
     if (expiry > 0) {
       interval = setInterval(() => {
         const newCountdown = calculateCountdown(expiryMilli);
-        if (newCountdown.minutes === 0 && newCountdown.seconds === 0) {
+        if (newCountdown.minutes === '0' && newCountdown.seconds === '00') {
           clearInterval(interval);
         } else {
           setCountdown(newCountdown);
@@ -26,12 +26,15 @@ const calculateCountdown = (expiry: number) => {
   const currentTime = new Date().getTime();
   const difference = expiry - currentTime;
   const remainingTime = Math.min(difference, expiry);
-  let timeLeft = { minutes: 0, seconds: 0 };
+  let timeLeft = { minutes: '0', seconds: '00' };
+
+  const minutes = Math.floor(remainingTime / (1000 * 60));
+  const seconds = Math.floor((remainingTime / 1000) % 60);
 
   if (remainingTime > 0) {
     timeLeft = {
-      minutes: Math.floor(remainingTime / (1000 * 60)),
-      seconds: Math.floor((remainingTime / 1000) % 60),
+      minutes: minutes.toString(),
+      seconds: seconds < 10 ? `0${seconds}` : seconds.toString(),
     };
   }
   return timeLeft;
