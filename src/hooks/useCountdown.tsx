@@ -1,8 +1,15 @@
 import { useState, useEffect } from 'react';
 
+export type Countdown = {
+  minutes: string;
+  seconds: string;
+};
+
 const useCountdown = (expiry: number) => {
   const expiryMilli = expiry * 1000;
-  const [countdown, setCountdown] = useState(calculateCountdown(expiryMilli));
+  const [countdown, setCountdown] = useState<Countdown>(
+    calculateCountdown(expiryMilli)
+  );
 
   useEffect(() => {
     let interval: NodeJS.Timeout | undefined = undefined;
@@ -10,6 +17,7 @@ const useCountdown = (expiry: number) => {
       interval = setInterval(() => {
         const newCountdown = calculateCountdown(expiryMilli);
         if (newCountdown.minutes === '0' && newCountdown.seconds === '00') {
+          setCountdown(newCountdown);
           clearInterval(interval);
         } else {
           setCountdown(newCountdown);

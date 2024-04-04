@@ -33,7 +33,7 @@ export default function Header(): JSX.Element {
         Tic·Tac·Aztec
       </Link>
       <div className='flex items-center'>
-        {activeGame?.timeout > 0n && (
+        {activeGame?.timeout > 0n && !gameRoute && (
           <div className='bg-[#913DE5] bg-opacity-50 flex gap-2 items-center mr-4 px-2 rounded-xl'>
             {countdown.minutes}:{countdown.seconds}
             <Clock size={18} />

@@ -1,5 +1,6 @@
 import { ContinuedStateChannel } from '@mach-34/aztec-statechannel-tictactoe';
 import { StateChannel } from 'contexts/UserContext';
+import { Countdown } from 'hooks/useCountdown';
 import { Loader2 } from 'lucide-react';
 import { useMemo } from 'react';
 import { Turn } from 'utils/types';
@@ -17,6 +18,7 @@ type StatusBadgeProps = {
   answeringTimeout: boolean;
   challengerJoined: boolean;
   channel: StateChannel | undefined;
+  countdown: Countdown;
   currentTurn: Turn | undefined;
   finalizingTurn: boolean;
   gameOver: number;
@@ -33,6 +35,7 @@ export default function StatusBadge({
   answeringTimeout,
   channel,
   challengerJoined,
+  countdown,
   currentTurn,
   finalizingTurn,
   gameOver,
@@ -53,6 +56,7 @@ export default function StatusBadge({
     [StatusType.Won]: '#47D822',
   };
 
+  // @TODO: Clean up messy logic
   const msg: { status: StatusType; text: string } = useMemo(() => {
     const channelOpen =
       channel instanceof ContinuedStateChannel || !!channel?.openChannelResult;
@@ -63,7 +67,7 @@ export default function StatusBadge({
       // Check if timeout has expired
       if (timeoutExpired) {
         return {
-          status: StatusType.ActionRequired,
+          status: isTurn ? StatusType.Lost : StatusType.Won,
           text: isTurn
             ? 'You have lost the game from timeout expiry. Please submit'
             : 'You have won the game from timeout expiry. Please submit',
@@ -75,12 +79,12 @@ export default function StatusBadge({
             : StatusType.ActionRequired,
           text: answeringTimeout
             ? 'Answering timeout...'
-            : 'Your opponent has triggered a timeout against you. Please answer within the remaining time',
+            : `Your opponent has triggered a timeout against you. Please answer within the remaining time: ${countdown.minutes}:${countdown.seconds}`,
         };
       } else {
         return {
           status: StatusType.Waiting,
-          text: 'Waiting for opponent to answer timeout',
+          text: `Waiting for opponent to answer timeout: ${countdown.minutes}:${countdown.seconds}`,
         };
       }
     }
@@ -88,9 +92,7 @@ export default function StatusBadge({
     // Game over message
     else if (gameOver) {
       const submitText = ' Please submit game to Aztec';
-      const lossMessage = `Your opponent won the game.${
-        !submitted ? submitText : ''
-      }`;
+      const lossMessage = `You lost the game.${!submitted ? submitText : ''}`;
       const winMessage = `You won the game!${!submitted ? submitText : ''}`;
 
       if (gameOver === 3) {
@@ -187,6 +189,7 @@ export default function StatusBadge({
   }, [
     answeringTimeout,
     channel,
+    countdown,
     currentTurn,
     finalizingTurn,
     gameOver,

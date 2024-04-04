@@ -30,11 +30,13 @@ import {
 } from 'utils/types';
 import { SchnorrSignature } from '@aztec/circuits.js/barretenberg';
 import StatusBadge from './components/StatusBadge';
+import useCountdown from 'hooks/useCountdown';
 // import DuplicationFraudModal from './components/DuplicationFraudModal';
 
 export default function GameView(): JSX.Element {
   const socket = useSocket();
   const { wallet, activeGame, setActiveGame, signingIn, contract } = useUser();
+  const countdown = useCountdown(Number(activeGame?.timeout ?? 0));
   const navigate = useNavigate();
   const [answeringTimeout, setAnsweringTimeout] = useState(false);
   const [board, setBoard] = useState<number[]>([]);
@@ -73,8 +75,8 @@ export default function GameView(): JSX.Element {
 
   const timeoutExpired = useMemo(() => {
     if (!activeGame || !activeGame.timeout) return false;
-    return new Date().getTime() / 1000 >= activeGame.timeout;
-  }, [activeGame?.timeout]);
+    return countdown.minutes === '0' && countdown.seconds === '00';
+  }, [countdown]);
 
   const canMove = useMemo(() => {
     if (!activeGame) return;
@@ -583,6 +585,7 @@ export default function GameView(): JSX.Element {
               activeGame?.challenger.toString() === ADDRESS_ZERO
             }
             channel={activeGame?.channel}
+            countdown={countdown}
             currentTurn={activeGame?.turns[activeGame.turnIndex]}
             finalizingTurn={finalizingTurn}
             gameOver={gameOver}
