@@ -100,14 +100,18 @@ export default function GameView(): JSX.Element {
   const gameOver = useMemo(() => {
     if (!activeGame) return 0;
 
+    const isDraw = activeGame.turnIndex === 9;
     const finalized = activeGame.turnIndex === activeGame.turns.length;
     const winningPlacement = checkWinningPlacement();
-    if (activeGame.over || (finalized && winningPlacement)) {
+    // Case where win occurs from timeout or fraud
+    if (activeGame.over && !isDraw && !winningPlacement) {
+      return activeGame.turnIndex % 2 === 1 ? 1 : 2;
+    } else if ((activeGame.over || finalized) && winningPlacement) {
       // 1 for host, 2 for challenger
       return activeGame.turnIndex % 2 === 1 ? 1 : 2;
     }
     // If game is draw return 0
-    return activeGame.turnIndex === 9 && (finalized || activeGame.over) ? 3 : 0;
+    return isDraw && (finalized || activeGame.over) ? 3 : 0;
   }, [activeGame, board, isHost]);
 
   const signOpponentTurn = async () => {
@@ -198,7 +202,11 @@ export default function GameView(): JSX.Element {
       return arr;
     }
 
-    if (gameOver || timeoutExpired) {
+    if (
+      (gameOver &&
+        (activeGame.timeout === 0 || (activeGame.timeout > 0 && isTurn))) ||
+      timeoutExpired
+    ) {
       arr.push(
         <Button
           className='my-2'
@@ -222,68 +230,41 @@ export default function GameView(): JSX.Element {
         />
       );
     }
-    if (currentTurn) {
-      if (!isTurn && !currentTurn.opponentSignature) {
-        arr.push(
-          <Button
-            className='my-2'
-            key='Sign Opponent Move'
-            onClick={() => signOpponentTurn()}
-            text='Sign Opponent Move'
-          />
-        );
-      } else if (
-        isTurn &&
-        currentTurn.opponentSignature &&
-        activeGame.turnIndex !== activeGame.turns.length
-      ) {
-        // arr.push(
-        //   <Button
-        //     className='my-2'
-        //     key='Finalize Turn'
-        //     onClick={() => finalizeTurn()}
-        //     text='Finalize Turn'
-        //   />
-        // );
-      }
+
+    if (!isTurn && currentTurn && !currentTurn.opponentSignature) {
+      arr.push(
+        <Button
+          className='my-2'
+          key='Sign Opponent Move'
+          onClick={() => signOpponentTurn()}
+          text='Sign Opponent Move'
+        />
+      );
     }
 
     if (!gameOver && channelOpen && activeGame.turns.length) {
       // Timeout related actions
 
-      if (activeGame.timeout > 0n && isTurn) {
-        // arr.push(
-        //   <Button
-        //     className='my-2'
-        //     key='Dispute Timeout'
-        //     onClick={() => null}
-        //     text='Dispute Timeout'
-        //   />
-        // );
-      } else {
-        // Case where we're waiting on opponent to sign our own turn
-        const waitingOnOpponentSignature =
-          isTurn && currentTurn && !currentTurn.opponentSignature;
+      // Case where we're waiting on opponent to sign our own turn
+      const waitingOnOpponentSignature =
+        isTurn && currentTurn && !currentTurn.opponentSignature;
 
-        // Case where we're waiting on opponent to take next turn
-        const waitingOnOpponentTurn =
-          !isTurn && activeGame.turnIndex === activeGame.turns.length;
-        if (
-          !activeGame.timeout &&
-          (waitingOnOpponentSignature || waitingOnOpponentTurn)
-        ) {
-          arr.push(
-            <Button
-              className='my-2'
-              key='Triggering Timeout'
-              loading={triggeringTimeout}
-              onClick={() => triggerTimeout()}
-              text={
-                triggeringTimeout ? 'Triggering timeout' : 'Trigger timeout'
-              }
-            />
-          );
-        }
+      // Case where we're waiting on opponent to take next turn
+      const waitingOnOpponentTurn =
+        !isTurn && activeGame.turnIndex === activeGame.turns.length;
+      if (
+        !activeGame.timeout &&
+        (waitingOnOpponentSignature || waitingOnOpponentTurn)
+      ) {
+        arr.push(
+          <Button
+            className='my-2'
+            key='Triggering Timeout'
+            loading={triggeringTimeout}
+            onClick={() => triggerTimeout()}
+            text={triggeringTimeout ? 'Triggering timeout' : 'Trigger timeout'}
+          />
+        );
       }
     }
 
@@ -435,6 +416,7 @@ export default function GameView(): JSX.Element {
         undefined,
         (res: SocketCallbackResponse) => {
           if (res.status === 'success') {
+            clone.timeout = 0;
             clone.over = true;
             setActiveGame(clone);
           }

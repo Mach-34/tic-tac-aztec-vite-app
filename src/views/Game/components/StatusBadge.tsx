@@ -58,66 +58,8 @@ export default function StatusBadge({
       channel instanceof ContinuedStateChannel || !!channel?.openChannelResult;
     const isTurn = isHost ? turnIndex % 2 === 0 : turnIndex % 2 === 1;
 
-    // Game over message
-    if (gameOver) {
-      const submitText = ' Please submit game to Aztec';
-      const lossMessage = `Your opponent won the game.${
-        !submitted ? submitText : ''
-      }`;
-      const winMessage = `You won the game!${!submitted ? submitText : ''}`;
-      if (timeout > 0) {
-        return {
-          status: StatusType.ActionRequired,
-          text: 'Opponent has triggered timeout on winning turn',
-        };
-      }
-      if (gameOver === 3) {
-        return {
-          status: submitted ? StatusType.Draw : StatusType.ActionRequired,
-          text: `Game ended in draw.${!submitted ? submitText : ''}`,
-        };
-      } else if (gameOver === 2) {
-        return isHost
-          ? {
-              status: submitted ? StatusType.Lost : StatusType.ActionRequired,
-              text: lossMessage,
-            }
-          : {
-              status: submitted ? StatusType.Won : StatusType.ActionRequired,
-              text: winMessage,
-            };
-      } else {
-        return isHost
-          ? {
-              status: submitted ? StatusType.Won : StatusType.ActionRequired,
-              text: winMessage,
-            }
-          : {
-              status: submitted ? StatusType.Lost : StatusType.ActionRequired,
-              text: lossMessage,
-            };
-      }
-    } else if (challengerJoined) {
-      return {
-        status: StatusType.Waiting,
-        text: 'Waiting for opponent to join.',
-      };
-    } else if (!channelOpen) {
-      if (isHost) {
-        return {
-          status: StatusType.ActionRequired,
-          text: 'Opponent has joined. Please provide your signature to start the game',
-        };
-      } else {
-        return {
-          status: StatusType.Waiting,
-          text: 'Waiting on host to sign channel open.',
-        };
-      }
-    }
-
     // Check timeout
-    else if (timeout > 0) {
+    if (timeout > 0) {
       // Check if timeout has expired
       if (timeoutExpired) {
         return {
@@ -139,6 +81,59 @@ export default function StatusBadge({
         return {
           status: StatusType.Waiting,
           text: 'Waiting for opponent to answer timeout',
+        };
+      }
+    }
+
+    // Game over message
+    else if (gameOver) {
+      const submitText = ' Please submit game to Aztec';
+      const lossMessage = `Your opponent won the game.${
+        !submitted ? submitText : ''
+      }`;
+      const winMessage = `You won the game!${!submitted ? submitText : ''}`;
+
+      if (gameOver === 3) {
+        return {
+          status: submitted ? StatusType.Draw : StatusType.ActionRequired,
+          text: `Game ended in draw.${!submitted ? submitText : ''}`,
+        };
+      } else if (gameOver === 2) {
+        return isHost
+          ? {
+              status: StatusType.Lost,
+              text: lossMessage,
+            }
+          : {
+              status: StatusType.Won,
+              text: winMessage,
+            };
+      } else {
+        return isHost
+          ? {
+              status: StatusType.Won,
+              text: winMessage,
+            }
+          : {
+              status: StatusType.Lost,
+              text: lossMessage,
+            };
+      }
+    } else if (challengerJoined) {
+      return {
+        status: StatusType.Waiting,
+        text: 'Waiting for opponent to join.',
+      };
+    } else if (!channelOpen) {
+      if (isHost) {
+        return {
+          status: StatusType.ActionRequired,
+          text: 'Opponent has joined. Please provide your signature to start the game',
+        };
+      } else {
+        return {
+          status: StatusType.Waiting,
+          text: 'Waiting on host to sign channel open.',
         };
       }
     }

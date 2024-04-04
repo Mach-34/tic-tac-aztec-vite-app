@@ -148,7 +148,6 @@ export const UserProvider: React.FC<{ children: JSX.Element }> = ({
             wallet,
             contract
           );
-          console.log('Latest state: ', latestPostedState);
           game.lastPostedTurn = Number(latestPostedState.turn);
           game.over = latestPostedState.over;
           game.timeout = Number(await getTimeout(game.id, wallet, contract));
@@ -178,6 +177,7 @@ export const UserProvider: React.FC<{ children: JSX.Element }> = ({
       setActiveGame((prev: any) => {
         const clone = cloneGame(prev);
         clone.over = true;
+        clone.timeout = 0;
         return clone;
       });
     };
