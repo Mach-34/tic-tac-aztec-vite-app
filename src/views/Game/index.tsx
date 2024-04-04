@@ -591,8 +591,6 @@ export default function GameView(): JSX.Element {
     })();
   }, [activeGame, signingIn]);
 
-  console.log('Active game: ', activeGame?.channel);
-
   return (
     <MainLayout>
       <div className='flex gap-4 items-center justify-between p-4'>
